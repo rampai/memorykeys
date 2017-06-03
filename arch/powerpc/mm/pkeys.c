@@ -16,3 +16,5 @@
 #include <linux/pkeys.h>                /* PKEY_*                       */
 
 bool pkey_inited;
+int  pkeys_total;		/* total pkeys as per device tree */
+u32  initial_allocation_mask;	/* bits set for reserved keys */
