@@ -143,5 +143,9 @@ static inline void pkey_mm_init(struct mm_struct *mm)
 	mm_pkey_allocation_map(mm) = initial_allocation_mask;
 }
 
+extern void thread_pkey_regs_save(struct thread_struct *thread);
+extern void thread_pkey_regs_restore(struct thread_struct *new_thread,
+			struct thread_struct *old_thread);
+extern void thread_pkey_regs_init(struct thread_struct *thread);
 extern void pkey_initialize(void);
 #endif /*_ASM_PPC64_PKEYS_H */
