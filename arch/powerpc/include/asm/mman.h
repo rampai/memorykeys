@@ -13,24 +13,31 @@
 
 #include <asm/cputable.h>
 #include <linux/mm.h>
+#include <linux/pkeys.h>
 #include <asm/cpu_has_feature.h>
+
+#ifdef CONFIG_PPC64_MEMORY_PROTECTION_KEYS
 
 /*
  * This file is included by linux/mman.h, so we can't use cacl_vm_prot_bits()
  * here.  How important is the optimization?
  */
-static inline unsigned long arch_calc_vm_prot_bits(unsigned long prot,
-		unsigned long pkey)
-{
-	return (prot & PROT_SAO) ? VM_SAO : 0;
-}
-#define arch_calc_vm_prot_bits(prot, pkey) arch_calc_vm_prot_bits(prot, pkey)
+#define arch_calc_vm_prot_bits(prot, key) (             \
+		((prot) & PROT_SAO ? VM_SAO : 0) |	\
+			pkey_to_vmflag_bits(key))
+#define arch_vm_get_page_prot(vm_flags) __pgprot(       \
+		((vm_flags) & VM_SAO ? _PAGE_SAO : 0) |	\
+		vmflag_to_page_pkey_bits(vm_flags))
 
-static inline pgprot_t arch_vm_get_page_prot(unsigned long vm_flags)
-{
-	return (vm_flags & VM_SAO) ? __pgprot(_PAGE_SAO) : __pgprot(0);
-}
-#define arch_vm_get_page_prot(vm_flags) arch_vm_get_page_prot(vm_flags)
+#else /* CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
+
+#define arch_calc_vm_prot_bits(prot, key) (	\
+		((prot) & PROT_SAO ? VM_SAO : 0))
+#define arch_vm_get_page_prot(vm_flags) __pgprot(	\
+		((vm_flags) & VM_SAO ? _PAGE_SAO : 0))
+
+#endif /* CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
+
 
 static inline bool arch_validate_prot(unsigned long prot)
 {
