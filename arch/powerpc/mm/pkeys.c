@@ -150,3 +150,42 @@ int __arch_set_user_pkey_access(struct task_struct *tsk, int pkey,
 	init_amr(pkey, new_amr_bits);
 	return 0;
 }
+
+void thread_pkey_regs_save(struct thread_struct *thread)
+{
+	if (!pkey_inited)
+		return;
+
+	/* @TODO skip saving any registers if the thread
+	 * has not used any keys yet.
+	 */
+
+	thread->amr = read_amr();
+	thread->iamr = read_iamr();
+	thread->uamor = read_uamor();
+}
+
+void thread_pkey_regs_restore(struct thread_struct *new_thread,
+			struct thread_struct *old_thread)
+{
+	if (!pkey_inited)
+		return;
+
+	/* @TODO just reset uamor to zero if the new_thread
+	 * has not used any keys yet.
+	 */
+
+	if (old_thread->amr != new_thread->amr)
+		write_amr(new_thread->amr);
+	if (old_thread->iamr != new_thread->iamr)
+		write_iamr(new_thread->iamr);
+	if (old_thread->uamor != new_thread->uamor)
+		write_uamor(new_thread->uamor);
+}
+
+void thread_pkey_regs_init(struct thread_struct *thread)
+{
+	write_amr(0x0ul);
+	write_iamr(0x0ul);
+	write_uamor(0x0ul);
+}
