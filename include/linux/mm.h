@@ -227,6 +227,7 @@ extern unsigned int kobjsize(const void *objp);
 #define VM_PKEY_BIT3	VM_HIGH_ARCH_3
 #endif /* CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
 #elif defined(CONFIG_PPC)
+#define VM_PKEY_SHIFT	VM_HIGH_ARCH_BIT_0
 #define VM_PKEY_BIT0	VM_HIGH_ARCH_0	/* A protection key is a 5-bit value */
 #define VM_PKEY_BIT1	VM_HIGH_ARCH_1
 #define VM_PKEY_BIT2	VM_HIGH_ARCH_2
