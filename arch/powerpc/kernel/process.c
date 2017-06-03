@@ -42,6 +42,7 @@
 #include <linux/hw_breakpoint.h>
 #include <linux/uaccess.h>
 #include <linux/elf-randomize.h>
+#include <linux/pkeys.h>
 
 #include <asm/pgtable.h>
 #include <asm/io.h>
@@ -1096,6 +1097,13 @@ static inline void save_sprs(struct thread_struct *t)
 		t->tar = mfspr(SPRN_TAR);
 	}
 #endif
+#ifdef CONFIG_PPC64_MEMORY_PROTECTION_KEYS
+	if (arch_pkeys_enabled()) {
+		t->amr = mfspr(SPRN_AMR);
+		t->iamr = mfspr(SPRN_IAMR);
+		t->uamor = mfspr(SPRN_UAMOR);
+	}
+#endif
 }
 
 static inline void restore_sprs(struct thread_struct *old_thread,
@@ -1129,6 +1137,16 @@ static inline void restore_sprs(struct thread_struct *old_thread,
 
 		if (old_thread->tar != new_thread->tar)
 			mtspr(SPRN_TAR, new_thread->tar);
+	}
+#endif
+#ifdef CONFIG_PPC64_MEMORY_PROTECTION_KEYS
+	if (arch_pkeys_enabled()) {
+		if (old_thread->amr != new_thread->amr)
+			mtspr(SPRN_AMR, new_thread->amr);
+		if (old_thread->iamr != new_thread->iamr)
+			mtspr(SPRN_IAMR, new_thread->iamr);
+		if (old_thread->uamor != new_thread->uamor)
+			mtspr(SPRN_UAMOR, new_thread->uamor);
 	}
 #endif
 }
@@ -1689,6 +1707,13 @@ void start_thread(struct pt_regs *regs, unsigned long start, unsigned long sp)
 	current->thread.tm_tfiar = 0;
 	current->thread.load_tm = 0;
 #endif /* CONFIG_PPC_TRANSACTIONAL_MEM */
+#ifdef CONFIG_PPC64_MEMORY_PROTECTION_KEYS
+	if (arch_pkeys_enabled()) {
+		current->thread.amr   = 0x0ul;
+		current->thread.iamr  = 0x0ul;
+		current->thread.uamor = 0x0ul;
+	}
+#endif /* CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
 }
 EXPORT_SYMBOL(start_thread);
 
