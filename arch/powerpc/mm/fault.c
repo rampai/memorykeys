@@ -145,6 +145,24 @@ static noinline int bad_area(struct pt_regs *regs, unsigned long address)
 	return __bad_area(regs, address, SEGV_MAPERR);
 }
 
+static int bad_page_fault_exception(struct pt_regs *regs, unsigned long address,
+				    int si_code)
+{
+	int sig = SIGBUS;
+	int code = BUS_OBJERR;
+
+#ifdef CONFIG_PPC_MEM_KEYS
+	if (si_code & DSISR_KEYFAULT) {
+		perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, address);
+		sig = SIGSEGV;
+		code = SEGV_PKUERR;
+	}
+#endif /* CONFIG_PPC_MEM_KEYS */
+
+	_exception(sig, regs, code, address);
+	return 0;
+}
+
 static int do_sigbus(struct pt_regs *regs, unsigned long address,
 		     unsigned int fault)
 {
@@ -391,11 +409,9 @@ static int __do_page_fault(struct pt_regs *regs, unsigned long address,
 		return 0;
 
 	if (unlikely(page_fault_is_bad(error_code))) {
-		if (is_user) {
-			_exception(SIGBUS, regs, BUS_OBJERR, address);
-			return 0;
-		}
-		return SIGBUS;
+		if (!is_user)
+			return SIGBUS;
+		return bad_page_fault_exception(regs, address, error_code);
 	}
 
 	/* Additional sanity check(s) */
@@ -498,6 +514,12 @@ good_area:
 	 * the fault.
 	 */
 	fault = handle_mm_fault(vma, address, flags);
+
+#ifdef CONFIG_PPC_MEM_KEYS
+	if (unlikely(fault & VM_FAULT_SIGSEGV))
+		return __bad_area(regs, address, SEGV_PKUERR);
+#endif /* CONFIG_PPC_MEM_KEYS */
+
 	major |= fault & VM_FAULT_MAJOR;
 
 	/*
