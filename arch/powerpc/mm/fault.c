@@ -182,6 +182,21 @@ static int mm_fault_error(struct pt_regs *regs, unsigned long addr, int fault)
 	return MM_FAULT_CONTINUE;
 }
 
+static inline pte_t *get_pte(unsigned long address)
+{
+	pte_t *ptep;
+
+	if (!current->mm || !current->mm->pgd)
+		return NULL;
+
+	ptep = __find_linux_pte_or_hugepte(current->mm->pgd, address,
+			NULL, NULL);
+	if (!ptep || !pte_present(*ptep))
+		return NULL;
+
+	return ptep;
+}
+
 /*
  * For 600- and 800-family processors, the error_code parameter is DSISR
  * for a data fault, SRR1 for an instruction fault. For 400-family processors
@@ -208,6 +223,9 @@ int do_page_fault(struct pt_regs *regs, unsigned long address,
  	int is_exec = trap == 0x400;
 	int fault;
 	int rc = 0, store_update_sp = 0;
+#ifdef CONFIG_PPC64_MEMORY_PROTECTION_KEYS
+	pte_t *ptep;
+#endif /* CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
 
 #if !(defined(CONFIG_4xx) || defined(CONFIG_BOOKE))
 	/*
@@ -260,6 +278,17 @@ int do_page_fault(struct pt_regs *regs, unsigned long address,
 		goto bail;
 	}
 #endif
+
+#ifdef CONFIG_PPC64_MEMORY_PROTECTION_KEYS
+	ptep = get_pte(address);
+	if ((error_code & DSISR_KEYFAULT) ||
+	     (ptep &&
+		!arch_pte_access_permitted(pte_val(*ptep),
+			is_write, is_exec))) {
+		code = SEGV_PKUERR;
+		goto bad_area_nosemaphore;
+ 	}
+#endif /* CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
 
 	/* We restore the interrupt state now */
 	if (!arch_irq_disabled_regs(regs))
@@ -441,6 +470,11 @@ good_area:
 		WARN_ON_ONCE(error_code & DSISR_PROTFAULT);
 #endif /* CONFIG_PPC_STD_MMU */
 
+	/* handle_mm_fault() needs to know if its a instruction access
+	 * fault.
+	 */
+	if (is_exec)
+		flags |= FAULT_FLAG_INSTRUCTION;
 	/*
 	 * If for any reason at all we couldn't handle the fault,
 	 * make sure we exit gracefully rather than endlessly redo
