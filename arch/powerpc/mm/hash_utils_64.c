@@ -35,6 +35,7 @@
 #include <linux/memblock.h>
 #include <linux/context_tracking.h>
 #include <linux/libfdt.h>
+#include <linux/pkeys.h>
 
 #include <asm/debugfs.h>
 #include <asm/processor.h>
@@ -176,7 +177,7 @@ static struct mmu_psize_def mmu_psize_defaults_gp[] = {
  *    - We make sure R is always set and never lost
  *    - C is _PAGE_DIRTY, and *should* always be set for a writeable mapping
  */
-unsigned long htab_convert_pte_flags(unsigned long pteflags)
+unsigned long htab_convert_pte_flags(unsigned long pteflags, int pkey)
 {
 	unsigned long rflags = 0;
 
@@ -244,7 +245,7 @@ int htab_bolt_mapping(unsigned long vstart, unsigned long vend,
 	shift = mmu_psize_defs[psize].shift;
 	step = 1 << shift;
 
-	prot = htab_convert_pte_flags(prot);
+	prot = htab_convert_pte_flags(prot, 0);
 
 	DBG("htab_bolt_mapping(%lx..%lx -> %lx (%lx,%d,%d)\n",
 	    vstart, vend, pstart, prot, psize, ssize);
@@ -1228,7 +1229,7 @@ int hash_page_mm(struct mm_struct *mm, unsigned long ea,
 	unsigned hugeshift;
 	const struct cpumask *tmp;
 	int rc, user_region = 0;
-	int psize, ssize;
+	int psize, ssize, pkey = 0;
 
 	DBG_LOW("hash_page(ea=%016lx, access=%lx, trap=%lx\n",
 		ea, access, trap);
@@ -1317,11 +1318,13 @@ int hash_page_mm(struct mm_struct *mm, unsigned long ea,
 	if (hugeshift) {
 		if (is_thp)
 			rc = __hash_page_thp(ea, access, vsid, (pmd_t *)ptep,
-					     trap, flags, ssize, psize);
+					     trap, flags, ssize, psize,
+					     pkey);
 #ifdef CONFIG_HUGETLB_PAGE
 		else
 			rc = __hash_page_huge(ea, access, vsid, ptep, trap,
-					      flags, ssize, hugeshift, psize);
+					      flags, ssize, hugeshift, psize,
+					      pkey);
 #else
 		else {
 			/*
@@ -1381,7 +1384,8 @@ int hash_page_mm(struct mm_struct *mm, unsigned long ea,
 #ifdef CONFIG_PPC_64K_PAGES
 	if (psize == MMU_PAGE_64K)
 		rc = __hash_page_64K(ea, access, vsid, ptep, trap,
-				     flags, ssize);
+				     flags, ssize,
+				     pkey);
 	else
 #endif /* CONFIG_PPC_64K_PAGES */
 	{
@@ -1390,7 +1394,8 @@ int hash_page_mm(struct mm_struct *mm, unsigned long ea,
 			rc = -2;
 		else
 			rc = __hash_page_4K(ea, access, vsid, ptep, trap,
-					    flags, ssize, spp);
+						flags, ssize, spp,
+						pkey);
 	}
 
 	/* Dump some info in case of hash insertion failure, they should
@@ -1486,8 +1491,9 @@ static bool should_hash_preload(struct mm_struct *mm, unsigned long ea)
 }
 #endif
 
-void hash_preload(struct mm_struct *mm, unsigned long ea,
-		  unsigned long access, unsigned long trap)
+void hash_preload_pkey(struct mm_struct *mm, unsigned long ea,
+		  unsigned long access, unsigned long trap,
+		  int pkey)
 {
 	int hugepage_shift;
 	unsigned long vsid;
@@ -1548,11 +1554,11 @@ void hash_preload(struct mm_struct *mm, unsigned long ea,
 #ifdef CONFIG_PPC_64K_PAGES
 	if (mm->context.user_psize == MMU_PAGE_64K)
 		rc = __hash_page_64K(ea, access, vsid, ptep, trap,
-				     update_flags, ssize);
+				     update_flags, ssize, pkey);
 	else
 #endif /* CONFIG_PPC_64K_PAGES */
 		rc = __hash_page_4K(ea, access, vsid, ptep, trap, update_flags,
-				    ssize, subpage_protection(mm, ea));
+				    ssize, subpage_protection(mm, ea), pkey);
 
 	/* Dump some info in case of hash insertion failure, they should
 	 * never happen so it is really useful to know if/when they do
@@ -1564,6 +1570,12 @@ void hash_preload(struct mm_struct *mm, unsigned long ea,
 				   pte_val(*ptep));
 out_exit:
 	local_irq_restore(flags);
+}
+
+void hash_preload(struct mm_struct *mm, unsigned long ea,
+		  unsigned long access, unsigned long trap)
+{
+	hash_preload_pkey(mm, ea, access, trap, 0);
 }
 
 #ifdef CONFIG_PPC_TRANSACTIONAL_MEM

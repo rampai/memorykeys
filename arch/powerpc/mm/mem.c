@@ -36,6 +36,7 @@
 #include <linux/hugetlb.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include <linux/pkeys.h>
 
 #include <asm/pgalloc.h>
 #include <asm/prom.h>

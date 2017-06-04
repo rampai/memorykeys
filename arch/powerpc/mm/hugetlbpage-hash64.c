@@ -20,7 +20,8 @@ extern long hpte_insert_repeating(unsigned long hash, unsigned long vpn,
 
 int __hash_page_huge(unsigned long ea, unsigned long access, unsigned long vsid,
 		     pte_t *ptep, unsigned long trap, unsigned long flags,
-		     int ssize, unsigned int shift, unsigned int mmu_psize)
+		     int ssize, unsigned int shift, unsigned int mmu_psize,
+		     int pkey)
 {
 	unsigned long vpn;
 	unsigned long old_pte, new_pte;
@@ -60,7 +61,7 @@ int __hash_page_huge(unsigned long ea, unsigned long access, unsigned long vsid,
 			new_pte |= _PAGE_DIRTY;
 	} while(!pte_xchg(ptep, __pte(old_pte), __pte(new_pte)));
 
-	rflags = htab_convert_pte_flags(new_pte);
+	rflags = htab_convert_pte_flags(new_pte, pkey);
 
 	sz = ((1UL) << shift);
 	if (!cpu_has_feature(CPU_FTR_COHERENT_ICACHE))

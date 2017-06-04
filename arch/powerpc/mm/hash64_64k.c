@@ -47,7 +47,7 @@ static unsigned long mark_subptegroup_valid(unsigned long ptev, unsigned long in
 
 int __hash_page_4K(unsigned long ea, unsigned long access, unsigned long vsid,
 		   pte_t *ptep, unsigned long trap, unsigned long flags,
-		   int ssize, int subpg_prot)
+		   int ssize, int subpg_prot, int pkey)
 {
 	real_pte_t rpte;
 	unsigned long *hidxp;
@@ -85,7 +85,7 @@ int __hash_page_4K(unsigned long ea, unsigned long access, unsigned long vsid,
 	 * Handle the subpage protection bits
 	 */
 	subpg_pte = new_pte & ~subpg_prot;
-	rflags = htab_convert_pte_flags(subpg_pte);
+	rflags = htab_convert_pte_flags(subpg_pte, pkey);
 
 	if (cpu_has_feature(CPU_FTR_NOEXECUTE) &&
 	    !cpu_has_feature(CPU_FTR_COHERENT_ICACHE)) {
@@ -219,7 +219,7 @@ repeat:
 
 int __hash_page_64K(unsigned long ea, unsigned long access,
 		    unsigned long vsid, pte_t *ptep, unsigned long trap,
-		    unsigned long flags, int ssize)
+		    unsigned long flags, int ssize, int pkey)
 {
 	unsigned long hpte_group;
 	unsigned long rflags, pa;
@@ -256,7 +256,7 @@ int __hash_page_64K(unsigned long ea, unsigned long access,
 			new_pte |= _PAGE_DIRTY;
 	} while (!pte_xchg(ptep, __pte(old_pte), __pte(new_pte)));
 
-	rflags = htab_convert_pte_flags(new_pte);
+	rflags = htab_convert_pte_flags(new_pte, pkey);
 
 	if (cpu_has_feature(CPU_FTR_NOEXECUTE) &&
 	    !cpu_has_feature(CPU_FTR_COHERENT_ICACHE))

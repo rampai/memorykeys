@@ -92,7 +92,7 @@ static inline int hash__pgd_bad(pgd_t pgd)
 
 extern void hpte_need_flush(struct mm_struct *mm, unsigned long addr,
 			    pte_t *ptep, unsigned long pte, int huge);
-extern unsigned long htab_convert_pte_flags(unsigned long pteflags);
+extern unsigned long htab_convert_pte_flags(unsigned long pteflags, int pkey);
 /* Atomic PTE updates */
 static inline unsigned long hash__pte_update(struct mm_struct *mm,
 					 unsigned long addr,

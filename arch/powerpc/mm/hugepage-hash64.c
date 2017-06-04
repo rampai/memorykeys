@@ -20,7 +20,7 @@
 
 int __hash_page_thp(unsigned long ea, unsigned long access, unsigned long vsid,
 		    pmd_t *pmdp, unsigned long trap, unsigned long flags,
-		    int ssize, unsigned int psize)
+		    int ssize, unsigned int psize, int pkey)
 {
 	unsigned int index, valid;
 	unsigned char *hpte_slot_array;
@@ -51,7 +51,7 @@ int __hash_page_thp(unsigned long ea, unsigned long access, unsigned long vsid,
 			new_pmd |= _PAGE_DIRTY;
 	} while (!pmd_xchg(pmdp, __pmd(old_pmd), __pmd(new_pmd)));
 
-	rflags = htab_convert_pte_flags(new_pmd);
+	rflags = htab_convert_pte_flags(new_pmd, pkey);
 
 #if 0
 	if (!cpu_has_feature(CPU_FTR_COHERENT_ICACHE)) {
