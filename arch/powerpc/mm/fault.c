@@ -356,7 +356,8 @@ static void sanity_check_fault(bool is_write, unsigned long error_code) { }
 #if defined(CONFIG_PPC_8xx)
 #define page_fault_is_bad(__err)	((__err) & DSISR_NOEXEC_OR_G)
 #elif defined(CONFIG_PPC64)
-#define page_fault_is_bad(__err)	((__err) & DSISR_BAD_FAULT_64S)
+#define page_fault_is_bad(__err)	((__err) & \
+					(DSISR_BAD_FAULT_64S & ~DSISR_KEYFAULT))
 #else
 #define page_fault_is_bad(__err)	((__err) & DSISR_BAD_FAULT_32S)
 #endif
@@ -426,6 +427,11 @@ static int __do_page_fault(struct pt_regs *regs, unsigned long address,
 		local_irq_enable();
 
 	perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, address);
+
+	if (error_code & DSISR_KEYFAULT) {
+		_exception(SIGSEGV, regs, SEGV_PKUERR, address);
+		return 0;
+	}
 
 	/*
 	 * We want to do this outside mmap_sem, because reading code around nip
@@ -498,6 +504,27 @@ good_area:
 	 * the fault.
 	 */
 	fault = handle_mm_fault(vma, address, flags);
+
+#ifdef CONFIG_PPC_MEM_KEYS
+	if (unlikely(fault & VM_FAULT_SIGSEGV)) {
+		/*
+		 * The PGD-PDT...PMD-PTE tree may not have been fully setup.
+		 * Hence we cannot walk the tree to locate the PTE, to locate
+		 * the key. Hence let's use vma_pkey() to get the key; instead
+		 * of get_mm_addr_key().
+		 */
+		int pkey = vma_pkey(vma);
+
+		/*
+		 * TODO: Change handle_mm_fault() to return a new VM_FAULT_PKEY
+		 * error so that we don't have to assume that VM_FAULT_SIGSEGV
+		 * in a VMA with a pkey set is caused by a key fault.
+		 */
+		if (likely(pkey))
+			return __bad_area(regs, address, SEGV_PKUERR);
+	}
+#endif /* CONFIG_PPC_MEM_KEYS */
+
 	major |= fault & VM_FAULT_MAJOR;
 
 	/*
