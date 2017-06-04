@@ -231,6 +231,10 @@ unsigned long htab_convert_pte_flags(unsigned long pteflags, int pkey)
 		 */
 		rflags |= HPTE_R_M;
 
+#ifdef CONFIG_PPC64_MEMORY_PROTECTION_KEYS
+	rflags |= pkey_to_hpte_pkey_bits(pkey);
+#endif
+
 	return rflags;
 }
 

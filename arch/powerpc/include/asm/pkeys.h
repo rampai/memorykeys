@@ -23,6 +23,15 @@ static inline unsigned long  pkey_to_vmflag_bits(int pkey)
 		((pkey & 0x10UL) ? VM_PKEY_BIT4 : 0x0UL));
 }
 
+static inline unsigned long  pkey_to_hpte_pkey_bits(int pkey)
+{
+	return	(((pkey & 0x10) ? HPTE_R_KEY_BIT0 : 0x0UL) |
+		((pkey & 0x8) ? HPTE_R_KEY_BIT1 : 0x0UL) |
+		((pkey & 0x4) ? HPTE_R_KEY_BIT2 : 0x0UL) |
+		((pkey & 0x2) ? HPTE_R_KEY_BIT3 : 0x0UL) |
+		((pkey & 0x1) ? HPTE_R_KEY_BIT4 : 0x0UL));
+}
+
 /*
  * Bits are in BE format.
  * NOTE: key 31, 1, 0 are not used.
