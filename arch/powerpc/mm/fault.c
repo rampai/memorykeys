@@ -216,9 +216,10 @@ int do_page_fault(struct pt_regs *regs, unsigned long address,
 	 * bits we are interested in.  But there are some bits which
 	 * indicate errors in DSISR but can validly be set in SRR1.
 	 */
-	if (trap == 0x400)
+	if (trap == 0x400) {
 		error_code &= 0x48200000;
-	else
+		flags |= FAULT_FLAG_INSTRUCTION;
+	} else
 		is_write = error_code & DSISR_ISSTORE;
 #else
 	is_write = error_code & ESR_DST;
@@ -260,6 +261,13 @@ int do_page_fault(struct pt_regs *regs, unsigned long address,
 		goto bail;
 	}
 #endif
+
+#ifdef CONFIG_PPC64_MEMORY_PROTECTION_KEYS
+	if (error_code & DSISR_KEYFAULT) {
+		code = SEGV_PKUERR;
+		goto bad_area_nosemaphore;
+	}
+#endif /*  CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
 
 	/* We restore the interrupt state now */
 	if (!arch_irq_disabled_regs(regs))
@@ -440,6 +448,15 @@ good_area:
 	if (!radix_enabled() && !is_write)
 		WARN_ON_ONCE(error_code & DSISR_PROTFAULT);
 #endif /* CONFIG_PPC_STD_MMU */
+
+#ifdef CONFIG_PPC64_MEMORY_PROTECTION_KEYS
+	if (!arch_vma_access_permitted(vma, flags & FAULT_FLAG_WRITE,
+					flags & FAULT_FLAG_INSTRUCTION,
+					0)) {
+		code = SEGV_PKUERR;
+		goto bad_area;
+	}
+#endif /* CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
 
 	/*
 	 * If for any reason at all we couldn't handle the fault,
