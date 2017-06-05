@@ -456,6 +456,8 @@ good_area:
 	 */
 	if (!arch_vma_access_permitted(vma, flags & FAULT_FLAG_WRITE,
 					is_exec, 0)) {
+		/* our caller may not have saved the AMR. Lets save it */
+		get_paca()->paca_amr = read_amr();
 		code = SEGV_PKUERR;
 		goto bad_area;
 	}
