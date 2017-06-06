@@ -453,6 +453,7 @@ good_area:
 	if (!arch_vma_access_permitted(vma, flags & FAULT_FLAG_WRITE,
 					flags & FAULT_FLAG_INSTRUCTION,
 					0)) {
+		regs->amr = read_amr(); /* our caller may not saved the amr */
 		code = SEGV_PKUERR;
 		goto bad_area;
 	}
