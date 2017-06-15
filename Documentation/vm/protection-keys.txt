@@ -1,11 +1,15 @@
 Memory Protection Keys for Userspace (PKU aka PKEYs) is a CPU feature
-which will be found on future Intel CPUs.
+found in new generation of intel CPUs on PowerPC CPUs.
 
 Memory Protection Keys provides a mechanism for enforcing page-based
 protections, but without requiring modification of the page tables
-when an application changes protection domains.  It works by
-dedicating 4 previously ignored bits in each page table entry to a
-"protection key", giving 16 possible keys.
+when an application changes protection domains.
+
+
+On Intel:
+
+It works by dedicating 4 previously ignored bits in each page table
+entry to a "protection key", giving 16 possible keys.
 
 There is also a new user-accessible register (PKRU) with two separate
 bits (Access Disable and Write Disable) for each key.  Being a CPU
@@ -16,6 +20,27 @@ There are two new instructions (RDPKRU/WRPKRU) for reading and writing
 to the new register.  The feature is only available in 64-bit mode,
 even though there is theoretically space in the PAE PTEs.  These
 permissions are enforced on data access only and have no effect on
+instruction fetches.
+
+
+On PowerPC:
+
+It works by dedicating 5 page table entry to a "protection key",
+giving 32 possible keys.
+
+There is a user-accessible register (AMR) with two separate bits
+(Access Disable and Write Disable) for each key.  Being a CPU
+register, AMR is inherently thread-local, potentially giving each
+thread a different set of protections from every other thread.
+NOTE: Disabling read permission does not disable
+write and vice-versa.
+
+The feature is available on 64-bit HPTE mode only.
+
+'mtspr 0xd, mem' reads the AMR register
+'mfspr mem, 0xd' writes into the AMR register.
+
+Permissions are enforced on data access only and have no effect on
 instruction fetches.
 
 =========================== Syscalls ===========================
