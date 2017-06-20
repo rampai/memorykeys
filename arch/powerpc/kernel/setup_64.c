@@ -37,6 +37,7 @@
 #include <linux/memblock.h>
 #include <linux/memory.h>
 #include <linux/nmi.h>
+#include <linux/pkeys.h>
 
 #include <asm/io.h>
 #include <asm/kdump.h>
@@ -745,3 +746,10 @@ static int __init disable_hardlockup_detector(void)
 }
 early_initcall(disable_hardlockup_detector);
 #endif
+
+#ifdef CONFIG_PPC64_MEMORY_PROTECTION_KEYS
+void arch_show_smap(struct seq_file *m, struct vm_area_struct *vma)
+{
+	seq_printf(m, "ProtectionKey:  %8u\n", vma_pkey(vma));
+}
+#endif /* CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
