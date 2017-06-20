@@ -74,6 +74,30 @@ static inline unsigned long __rpte_to_hidx(real_pte_t rpte, unsigned long index)
 	return (pte_val(rpte.pte) >> H_PAGE_F_GIX_SHIFT) & 0xf;
 }
 
+/*
+ * Commit the hash slot and return PTE bits that needs to be modified.
+ * The caller is expected to modify the PTE bits accordingly and commit the PTE
+ * to memory.
+ */
+static inline unsigned long pte_set_hash_slot(pte_t *ptep, real_pte_t rpte,
+		unsigned int subpg_index, unsigned long slot)
+{
+	unsigned long *hidxp = (unsigned long *)(ptep + PTRS_PER_PTE);
+
+	rpte.hidx &= ~(0xfUL << (subpg_index << 2));
+	*hidxp = rpte.hidx  | (slot << (subpg_index << 2));
+
+	/*
+	 * Anyone reading PTE must ensure hidx bits are read after reading the
+	 * PTE by using the read-side barrier smp_rmb(). __real_pte() can be
+	 * used for that.
+	 */
+	smp_wmb();
+
+	/* No PTE bits to be modified, return 0x0UL */
+	return 0x0UL;
+}
+
 #define __rpte_to_pte(r)	((r).pte)
 extern bool __rpte_sub_valid(real_pte_t rpte, unsigned long index);
 /*
