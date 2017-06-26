@@ -1319,6 +1319,10 @@ int hash_page_mm(struct mm_struct *mm, unsigned long ea,
 		goto bail;
 	}
 
+#ifdef CONFIG_PPC64_MEMORY_PROTECTION_KEYS
+	pkey = mm_pkey(mm, ea);
+#endif /* CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
+
 	if (hugeshift) {
 		if (is_thp)
 			rc = __hash_page_thp(ea, access, vsid, (pmd_t *)ptep,

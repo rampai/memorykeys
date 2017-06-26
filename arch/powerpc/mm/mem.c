@@ -541,8 +541,14 @@ void update_mmu_cache(struct vm_area_struct *vma, unsigned long address,
 		return;
 	}
 
+#ifdef CONFIG_PPC64_MEMORY_PROTECTION_KEYS
+	hash_preload_pkey(vma->vm_mm, address, access, trap, vma_pkey(vma));
+#else
 	hash_preload(vma->vm_mm, address, access, trap);
+#endif /* CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
+
 #endif /* CONFIG_PPC_STD_MMU */
+
 #if (defined(CONFIG_PPC_BOOK3E_64) || defined(CONFIG_PPC_FSL_BOOK3E)) \
 	&& defined(CONFIG_HUGETLB_PAGE)
 	if (is_vm_hugetlb_page(vma))

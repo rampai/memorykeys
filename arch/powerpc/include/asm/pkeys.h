@@ -74,6 +74,17 @@ static inline bool mm_pkey_is_allocated(struct mm_struct *mm, int pkey)
 }
 
 /*
+ * return the protection key of the vma corresponding to the
+ * given effective address @ea.
+ */
+static inline int mm_pkey(struct mm_struct *mm, unsigned long ea)
+{
+	struct vm_area_struct *vma = find_vma(mm, ea);
+	int pkey = vma ? vma_pkey(vma) : 0;
+	return pkey;
+}
+
+/*
  * Returns a positive, 5-bit key on success, or -1 on failure.
  */
 static inline int mm_pkey_alloc(struct mm_struct *mm)
