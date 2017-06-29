@@ -9,6 +9,7 @@
  * (at your option) any later version.
  */
 
+#include <asm/mman.h>
 #include <linux/pkeys.h>
 
 bool pkey_inited;
@@ -65,6 +66,20 @@ void __init pkey_initialize(void)
 		initial_allocation_mask &= ~(0x1 << i);
 }
 
+static bool is_pkey_enabled(int pkey)
+{
+	u64 uamor = read_uamor();
+	u64 pkey_bits = 0x3ul << pkeyshift(pkey);
+	u64 uamor_pkey_bits = (uamor & pkey_bits);
+
+	/* 
+	 * both the bits in UMOR corresponding to the key should be set or
+	 * reset.
+	 */
+	BUG_ON(uamor_pkey_bits && (uamor_pkey_bits != pkey_bits));
+	return !!(uamor_pkey_bits);
+}
+
 static inline void init_amr(int pkey, u8 init_bits)
 {
 	u64 new_amr_bits = (((u64)init_bits & 0x3UL) << pkeyshift(pkey));
@@ -106,4 +121,26 @@ void __arch_activate_pkey(int pkey)
 void __arch_deactivate_pkey(int pkey)
 {
 	pkey_status_change(pkey, false);
+}
+
+/*
+ * Set the access rights in AMR IAMR and UAMOR registers for @pkey to that
+ * specified in @init_val.
+ */
+int __arch_set_user_pkey_access(struct task_struct *tsk, int pkey,
+				unsigned long init_val)
+{
+	u64 new_amr_bits = 0x0ul;
+
+	if (!is_pkey_enabled(pkey))
+		return -EINVAL;
+
+	/* Set the bits we need in AMR: */
+	if (init_val & PKEY_DISABLE_ACCESS)
+		new_amr_bits |= AMR_RD_BIT | AMR_WR_BIT;
+	else if (init_val & PKEY_DISABLE_WRITE)
+		new_amr_bits |= AMR_WR_BIT;
+
+	init_amr(pkey, new_amr_bits);
+	return 0;
 }
