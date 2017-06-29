@@ -23,6 +23,24 @@ extern u32 initial_allocation_mask;/* bits set for reserved keys */
 #define VM_PKEY_BIT4	VM_HIGH_ARCH_4
 #endif
 
+/* override any generic PKEY Permission defines */
+#define PKEY_DISABLE_EXECUTE   0x4
+#define PKEY_ACCESS_MASK       (PKEY_DISABLE_ACCESS |\
+				PKEY_DISABLE_WRITE  |\
+				PKEY_DISABLE_EXECUTE)
+
+static inline u64 pkey_to_vmflag_bits(u16 pkey)
+{
+	if (!pkey_inited)
+		return 0x0UL;
+
+	return (((pkey & 0x1UL) ? VM_PKEY_BIT0 : 0x0UL) |
+		((pkey & 0x2UL) ? VM_PKEY_BIT1 : 0x0UL) |
+		((pkey & 0x4UL) ? VM_PKEY_BIT2 : 0x0UL) |
+		((pkey & 0x8UL) ? VM_PKEY_BIT3 : 0x0UL) |
+		((pkey & 0x10UL) ? VM_PKEY_BIT4 : 0x0UL));
+}
+
 #define arch_max_pkey()  pkeys_total
 #define AMR_RD_BIT 0x1UL
 #define AMR_WR_BIT 0x2UL
