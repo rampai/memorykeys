@@ -43,6 +43,9 @@ extern u32 initial_allocation_mask;/* bits set for reserved keys */
 			    VM_PKEY_BIT3 | VM_PKEY_BIT4)
 
 #define arch_max_pkey() pkeys_total
+#define AMR_RD_BIT 0x1UL
+#define AMR_WR_BIT 0x2UL
+#define IAMR_EX_BIT 0x1UL
 #define AMR_BITS_PER_PKEY 2
 
 #define pkey_alloc_mask(pkey) (0x1 << pkey)
@@ -141,10 +144,14 @@ static inline int arch_override_mprotect_pkey(struct vm_area_struct *vma,
 	return 0;
 }
 
+extern int __arch_set_user_pkey_access(struct task_struct *tsk, int pkey,
+				       unsigned long init_val);
 static inline int arch_set_user_pkey_access(struct task_struct *tsk, int pkey,
 					    unsigned long init_val)
 {
-	return 0;
+	if (static_branch_likely(&pkey_disabled))
+		return -EINVAL;
+	return __arch_set_user_pkey_access(tsk, pkey, init_val);
 }
 
 static inline void pkey_mm_init(struct mm_struct *mm)
