@@ -16,6 +16,10 @@
 #include <linux/pkeys.h>                /* PKEY_*                       */
 
 #define pkeyshift(pkey) ((arch_max_pkey()-pkey-1) * AMR_BITS_PER_PKEY)
+static bool is_pkey_enabled(int pkey)
+{
+	return !!(read_uamor() & (0x3ul << pkeyshift(pkey)));
+}
 
 static inline void init_amr(int pkey, u8 init_bits)
 {
@@ -58,4 +62,37 @@ void __arch_activate_pkey(int pkey)
 void __arch_deactivate_pkey(int pkey)
 {
 	pkey_status_change(pkey, false);
+}
+
+/*
+ * set the access right in AMR IAMR and UAMOR register
+ * for @pkey to that specified in @init_val.
+ */
+int __arch_set_user_pkey_access(struct task_struct *tsk, int pkey,
+		unsigned long init_val)
+{
+	u64 new_amr_bits = 0x0ul;
+	u64 new_iamr_bits = 0x0ul;
+
+	if (!is_pkey_enabled(pkey))
+		return -1;
+
+	/* Set the bits we need in AMR:  */
+	if (init_val & PKEY_DISABLE_ACCESS)
+		new_amr_bits |= AMR_RD_BIT | AMR_WR_BIT;
+	else if (init_val & PKEY_DISABLE_WRITE)
+		new_amr_bits |= AMR_WR_BIT;
+
+	init_amr(pkey, new_amr_bits);
+
+	/*
+	 * By default execute is disabled.
+	 * To enable execute, PKEY_ENABLE_EXECUTE
+	 * needs to be specified.
+	 */
+	if ((init_val & PKEY_DISABLE_EXECUTE))
+		new_iamr_bits |= IAMR_EX_BIT;
+
+	init_iamr(pkey, new_iamr_bits);
+	return 0;
 }
