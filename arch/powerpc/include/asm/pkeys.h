@@ -128,9 +128,13 @@ static inline int mm_pkey_free(struct mm_struct *mm, int pkey)
  * Try to dedicate one of the protection keys to be used as an
  * execute-only protection key.
  */
+extern int __execute_only_pkey(struct mm_struct *mm);
 static inline int execute_only_pkey(struct mm_struct *mm)
 {
-	return 0;
+	if (static_branch_likely(&pkey_disabled))
+		return -1;
+
+	return __execute_only_pkey(mm);
 }
 
 static inline int arch_override_mprotect_pkey(struct vm_area_struct *vma,
@@ -154,6 +158,8 @@ static inline void pkey_mm_init(struct mm_struct *mm)
 	if (static_branch_likely(&pkey_disabled))
 		return;
 	mm_pkey_allocation_map(mm) = initial_allocation_mask;
+	/* -1 means unallocated or invalid */
+	mm->context.execute_only_pkey = -1;
 }
 
 extern void thread_pkey_regs_save(struct thread_struct *thread);
