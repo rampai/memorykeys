@@ -474,6 +474,8 @@ static inline void write_uamor(u64 value)
 	mtspr(SPRN_UAMOR, value);
 }
 
+extern bool arch_pte_access_permitted(u64 pte, bool write, bool execute);
+
 #else /* CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
 
 static inline u64 read_amr(void)
