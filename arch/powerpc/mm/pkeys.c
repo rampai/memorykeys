@@ -194,18 +194,10 @@ static inline bool vma_is_foreign(struct vm_area_struct *vma)
 	return false;
 }
 
-bool arch_vma_access_permitted(struct vm_area_struct *vma,
-		bool write, bool execute, bool foreign)
+static bool pkey_access_permitted(int pkey, bool write, bool execute)
 {
-	int pkey;
 	int pkey_shift;
 	u64 amr;
-
-	/* allow access if the VMA is not one from this process */
-	if (foreign || vma_is_foreign(vma))
-		return true;
-
-	pkey = vma_pkey(vma);
 
 	if (!pkey)
 		return true;
@@ -225,4 +217,23 @@ bool arch_vma_access_permitted(struct vm_area_struct *vma,
 
 	amr = read_amr(); /* delay reading amr uptil absolutely needed */
 	return (write && !(amr & (AMR_WD_BIT << pkey_shift)));
+}
+
+bool arch_vma_access_permitted(struct vm_area_struct *vma,
+		bool write, bool execute, bool foreign)
+{
+	int pkey;
+
+	/* allow access if the VMA is not one from this process */
+	if (foreign || vma_is_foreign(vma))
+		return true;
+
+	pkey = vma_pkey(vma);
+	return pkey_access_permitted(pkey, write, execute);
+}
+
+bool arch_pte_key_allowed(u64 pte, int write)
+{
+	return pkey_access_permitted(pte_to_pkey_bits(pte),
+			!!write, 0);
 }
