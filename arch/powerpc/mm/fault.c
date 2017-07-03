@@ -287,6 +287,8 @@ int do_page_fault(struct pt_regs *regs, unsigned long address,
 			is_write, is_exec))) {
 		code = SEGV_PKUERR;
 		get_paca()->paca_amr = read_amr();
+		get_paca()->paca_pkey = ptep ?
+			pte_to_pkey_bits(pte_val(*ptep)) : 0;
 		goto bad_area_nosemaphore;
  	}
 #endif /* CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
