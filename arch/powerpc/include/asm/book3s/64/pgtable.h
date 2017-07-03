@@ -474,6 +474,15 @@ static inline void write_uamor(u64 value)
 	mtspr(SPRN_UAMOR, value);
 }
 
+extern bool arch_pte_key_allowed(u64 pte, int write);
+
+#define pte_access_permitted(pte, write) \
+	(pte_present(pte) && ((!(write) || pte_write(pte)) && arch_pte_key_allowed(pte_val(pte), write)))
+
+/* we store key in pmd for huge tlb pages. So need to check for key protection */
+#define pmd_access_permitted(pmd, write) \
+	(pmd_present(pmd) && ((!(write) || pmd_write(pmd)) && arch_pte_key_allowed(pmd_val(pmd), write)))
+
 #else /* CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
 
 static inline u64 read_amr(void)
