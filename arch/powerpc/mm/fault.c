@@ -107,7 +107,8 @@ static bool store_updates_sp(struct pt_regs *regs)
  */
 
 static int
-__bad_area_nosemaphore(struct pt_regs *regs, unsigned long address, int si_code)
+__bad_area_nosemaphore(struct pt_regs *regs, unsigned long address, int si_code,
+		int pkey)
 {
 	/*
 	 * If we are in kernel mode, bail out with a SEGV, this will
@@ -117,17 +118,18 @@ __bad_area_nosemaphore(struct pt_regs *regs, unsigned long address, int si_code)
 	if (!user_mode(regs))
 		return SIGSEGV;
 
-	_exception(SIGSEGV, regs, si_code, address);
+	_exception_pkey(SIGSEGV, regs, si_code, address, pkey);
 
 	return 0;
 }
 
 static noinline int bad_area_nosemaphore(struct pt_regs *regs, unsigned long address)
 {
-	return __bad_area_nosemaphore(regs, address, SEGV_MAPERR);
+	return __bad_area_nosemaphore(regs, address, SEGV_MAPERR, 0);
 }
 
-static int __bad_area(struct pt_regs *regs, unsigned long address, int si_code)
+static int __bad_area(struct pt_regs *regs, unsigned long address, int si_code,
+			int pkey)
 {
 	struct mm_struct *mm = current->mm;
 
@@ -137,30 +139,18 @@ static int __bad_area(struct pt_regs *regs, unsigned long address, int si_code)
 	 */
 	up_read(&mm->mmap_sem);
 
-	return __bad_area_nosemaphore(regs, address, si_code);
+	return __bad_area_nosemaphore(regs, address, si_code, pkey);
 }
 
 static noinline int bad_area(struct pt_regs *regs, unsigned long address)
 {
-	return __bad_area(regs, address, SEGV_MAPERR);
+	return __bad_area(regs, address, SEGV_MAPERR, 0);
 }
 
-static int bad_page_fault_exception(struct pt_regs *regs, unsigned long address,
-				    int si_code)
+static int bad_key_fault_exception(struct pt_regs *regs, unsigned long address,
+				    int pkey)
 {
-	int sig = SIGBUS;
-	int code = BUS_OBJERR;
-
-#ifdef CONFIG_PPC_MEM_KEYS
-	if (si_code & DSISR_KEYFAULT) {
-		perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, address);
-		sig = SIGSEGV;
-		code = SEGV_PKUERR;
-	}
-#endif /* CONFIG_PPC_MEM_KEYS */
-
-	_exception(sig, regs, code, address);
-	return 0;
+	return __bad_area_nosemaphore(regs, address, SEGV_PKUERR, pkey);
 }
 
 static int do_sigbus(struct pt_regs *regs, unsigned long address,
@@ -411,7 +401,16 @@ static int __do_page_fault(struct pt_regs *regs, unsigned long address,
 	if (unlikely(page_fault_is_bad(error_code))) {
 		if (!is_user)
 			return SIGBUS;
-		return bad_page_fault_exception(regs, address, error_code);
+
+		if (error_code & DSISR_KEYFAULT) {
+			perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs,
+					address);
+			return bad_key_fault_exception(regs, address,
+				 get_mm_addr_key(current->mm, address));
+		}
+
+		_exception_pkey(SIGBUS, regs, BUS_OBJERR, address, 0);
+		return 0;
 	}
 
 	/* Additional sanity check(s) */
@@ -516,8 +515,16 @@ good_area:
 	fault = handle_mm_fault(vma, address, flags);
 
 #ifdef CONFIG_PPC_MEM_KEYS
-	if (unlikely(fault & VM_FAULT_SIGSEGV))
-		return __bad_area(regs, address, SEGV_PKUERR);
+	if (unlikely(fault & VM_FAULT_SIGSEGV)) {
+		/*
+		 * The PGD-PDT...PMD-PTE tree may not have been fully setup.
+		 * Hence we cannot walk the tree to locate the PTE, to locate
+		 * the key. Hence lets use vma_pkey() to get the key; instead
+		 * of get_mm_addr_key().
+		 */
+		up_read(&current->mm->mmap_sem);
+		return bad_key_fault_exception(regs, address, vma_pkey(vma));
+	}
 #endif /* CONFIG_PPC_MEM_KEYS */
 
 	major |= fault & VM_FAULT_MAJOR;
