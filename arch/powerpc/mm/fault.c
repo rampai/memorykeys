@@ -153,6 +153,7 @@ static int bad_page_fault_exception(struct pt_regs *regs, unsigned long address,
 
 #ifdef CONFIG_PPC64_MEMORY_PROTECTION_KEYS
 	if (si_code & DSISR_KEYFAULT) {
+		get_paca()->paca_pkey = get_pte_pkey(current->mm, address);
 		sig = SIGSEGV;
 		code = SEGV_PKUERR;
 	}
@@ -509,8 +510,16 @@ good_area:
 
 #ifdef CONFIG_PPC64_MEMORY_PROTECTION_KEYS
 	if (!arch_vma_access_permitted(vma, flags & FAULT_FLAG_WRITE,
-			is_exec, 0))
+			is_exec, 0)) {
+		/*
+		 * The pgd-pdt...pmd-pte tree may not  have  been fully setup.
+		 * Hence we cannot walk the tree to locate the pte, to locate
+		 * the key. Hence lets use vma_pkey() to get the key; instead
+		 * of get_pte_pkey().
+		 */
+		get_paca()->paca_pkey = vma_pkey(vma);
 		return __bad_area(regs, address, SEGV_PKUERR);
+	}
 #endif /* CONFIG_PPC64_MEMORY_PROTECTION_KEYS */
 
 
