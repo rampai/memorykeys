@@ -43,6 +43,7 @@ extern u32 initial_allocation_mask;/* bits set for reserved keys */
 			    VM_PKEY_BIT3 | VM_PKEY_BIT4)
 
 #define arch_max_pkey() pkeys_total
+#define AMR_BITS_PER_PKEY 2
 
 #define pkey_alloc_mask(pkey) (0x1 << pkey)
 
