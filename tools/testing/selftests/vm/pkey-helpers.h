@@ -46,7 +46,8 @@
 #define fpregs fp_regs
 
 #define NR_PKEYS		32
-#define NR_RESERVED_PKEYS	3
+#define NR_RESERVED_PKEYS_4K	26
+#define NR_RESERVED_PKEYS_64K	3
 #define PKEY_BITS_PER_PKEY	2
 #define PKEY_DISABLE_ACCESS	0x3  /* disable read and write */
 #define PKEY_DISABLE_WRITE	0x2
@@ -385,6 +386,20 @@ static inline int get_start_key(void)
 	return 1;
 #elif __powerpc64__ /* arch */
 	return 0;
+#else /* arch */
+	NOT SUPPORTED
+#endif /* arch */
+}
+
+static inline int arch_reserved_keys(void)
+{
+#ifdef __i386__ /* arch */
+	return NR_RESERVED_PKEYS;
+#elif __powerpc64__ /* arch */
+	if (sysconf(_SC_PAGESIZE) == 4096)
+		return NR_RESERVED_PKEYS_4K;
+	else
+		return NR_RESERVED_PKEYS_64K;
 #else /* arch */
 	NOT SUPPORTED
 #endif /* arch */
