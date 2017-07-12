@@ -32,6 +32,8 @@
 #define PKEY_DISABLE_ACCESS	0x1
 #define PKEY_DISABLE_WRITE	0x2
 #define HPAGE_SIZE		(1UL<<21)
+#define pkey_reg_t u32
+#define PKEY_REG_FMT "%016x"
 
 static inline void __page_o_noops(void)
 {
