@@ -72,4 +72,12 @@ static inline bool is_pkey_supported(void)
 /* 8-bytes of instruction * 16384bytes = 1 page */
 #define __page_o_noops() asm(".rept 16384 ; nop; .endr")
 
+static inline int arch_reserved_keys(void)
+{
+	if (sysconf(_SC_PAGESIZE) == 4096)
+		return NR_RESERVED_PKEYS_4K;
+	else
+		return NR_RESERVED_PKEYS_64K;
+}
+
 #endif /* _PKEYS_POWERPC_H */
