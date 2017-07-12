@@ -34,6 +34,7 @@
 #define HPAGE_SIZE		(1UL<<21)
 #define pkey_reg_t u32
 #define PKEY_REG_FMT "%016x"
+#define HUGEPAGE_FILE "/sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages"
 
 static inline u32 pkey_bit_position(int pkey)
 {
