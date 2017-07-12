@@ -153,4 +153,9 @@ static inline void __page_o_noops(void)
 	asm(".rept 512 ; nopl 0x7eeeeeee(%eax) ; .endr");
 }
 
+static inline int arch_reserved_keys(void)
+{
+	return NR_RESERVED_PKEYS;
+}
+
 #endif /* _PKEYS_X86_H */
