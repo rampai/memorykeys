@@ -18,10 +18,10 @@
 #define u16 uint16_t
 #define u32 uint32_t
 #define u64 uint64_t
-#define pkey_reg_t u32
 
-#ifdef __i386__
+#if defined(__i386__) || defined(__x86_64__) /* arch */
 
+#ifdef __i386__ /* arch */
 #ifndef SYS_mprotect_key
 # define SYS_mprotect_key	380
 #endif
@@ -34,7 +34,7 @@
 #define REG_IP_IDX REG_EIP
 #define si_pkey_offset 0x14
 
-#else
+#elif __x86_64__
 
 #ifndef SYS_mprotect_key
 # define SYS_mprotect_key	329
@@ -47,9 +47,10 @@
 #define REG_IP_IDX REG_RIP
 #define si_pkey_offset 0x20
 
-#endif
+#endif /* __x86_64__ */
 
 #define NR_PKEYS 16
+#define NR_RESERVED_PKEYS	1
 #define PKEY_BITS_PER_PKEY 2
 
 #ifndef PKEY_DISABLE_ACCESS
@@ -61,6 +62,39 @@
 #endif
 
 #define HPAGE_SIZE	(1UL<<21)
+#define pkey_reg_t u32
+
+#elif __powerpc64__ /* arch */
+
+#ifndef SYS_mprotect_key
+# define SYS_mprotect_key 386
+#endif
+#ifndef SYS_pkey_alloc
+# define SYS_pkey_alloc	 384
+# define SYS_pkey_free	 385
+#endif
+
+#define REG_IP_IDX PT_NIP
+#define REG_TRAPNO PT_TRAP
+#define gregs gp_regs
+#define fpregs fp_regs
+
+#define NR_PKEYS		32
+#define NR_RESERVED_PKEYS_4K	26
+#define NR_RESERVED_PKEYS_64K	3
+#define PKEY_BITS_PER_PKEY	2
+#ifndef PKEY_DISABLE_ACCESS
+# define PKEY_DISABLE_ACCESS	0x3  /* disable read and write */
+#endif
+#ifndef PKEY_DISABLE_WRITE
+# define PKEY_DISABLE_WRITE	0x2
+#endif
+#define HPAGE_SIZE		(1UL<<24)
+#define pkey_reg_t u64
+
+#else /* arch */
+	NOT SUPPORTED
+#endif /* arch */
 
 #ifndef DEBUG_LEVEL
 #define DEBUG_LEVEL 0
@@ -69,7 +103,11 @@
 
 static inline u32 pkey_to_shift(int pkey)
 {
+#if defined(__i386__) || defined(__x86_64__) /* arch */
 	return pkey * PKEY_BITS_PER_PKEY;
+#elif __powerpc64__ /* arch */
+	return (NR_PKEYS - pkey - 1) * PKEY_BITS_PER_PKEY;
+#endif /* arch */
 }
 
 static inline pkey_reg_t reset_bits(int pkey, pkey_reg_t bits)
@@ -129,6 +167,7 @@ static inline void sigsafe_printf(const char *format, ...)
 extern pkey_reg_t shadow_pkey_reg;
 static inline pkey_reg_t __rdpkey_reg(void)
 {
+#if defined(__i386__) || defined(__x86_64__) /* arch */
 	unsigned int eax, edx;
 	unsigned int ecx = 0;
 	pkey_reg_t pkey_reg;
@@ -136,7 +175,13 @@ static inline pkey_reg_t __rdpkey_reg(void)
 	asm volatile(".byte 0x0f,0x01,0xee\n\t"
 		     : "=a" (eax), "=d" (edx)
 		     : "c" (ecx));
-	pkey_reg = eax;
+#elif __powerpc64__ /* arch */
+	pkey_reg_t eax;
+	pkey_reg_t pkey_reg;
+
+	asm volatile("mfspr %0, 0xd" : "=r" ((pkey_reg_t)(eax)));
+#endif /* arch */
+	pkey_reg = (pkey_reg_t)eax;
 	return pkey_reg;
 }
 
@@ -156,6 +201,7 @@ static inline pkey_reg_t _rdpkey_reg(int line)
 static inline void __wrpkey_reg(pkey_reg_t pkey_reg)
 {
 	pkey_reg_t eax = pkey_reg;
+#if defined(__i386__) || defined(__x86_64__) /* arch */
 	pkey_reg_t ecx = 0;
 	pkey_reg_t edx = 0;
 
@@ -164,6 +210,14 @@ static inline void __wrpkey_reg(pkey_reg_t pkey_reg)
 	asm volatile(".byte 0x0f,0x01,0xef\n\t"
 		     : : "a" (eax), "c" (ecx), "d" (edx));
 	assert(pkey_reg == __rdpkey_reg());
+
+#elif __powerpc64__ /* arch */
+	dprintf4("%s() changing %llx to %llx\n",
+			 __func__, __rdpkey_reg(), pkey_reg);
+	asm volatile("mtspr 0xd, %0" : : "r" ((unsigned long)(eax)) : "memory");
+#endif /* arch */
+	dprintf4("%s() pkey register after changing %016lx to %016lx\n",
+			 __func__, __rdpkey_reg(), pkey_reg);
 }
 
 static inline void wrpkey_reg(pkey_reg_t pkey_reg)
@@ -209,6 +263,8 @@ static inline void __pkey_write_allow(int pkey, int do_allow_write)
 	wrpkey_reg(pkey_reg);
 	dprintf4("pkey_reg now: %08x\n", rdpkey_reg());
 }
+
+#if defined(__i386__) || defined(__x86_64__) /* arch */
 
 #define PAGE_SIZE 4096
 #define MB	(1<<20)
@@ -292,8 +348,18 @@ static inline void __page_o_noops(void)
 	/* 8-bytes of instruction * 512 bytes = 1 page */
 	asm(".rept 512 ; nopl 0x7eeeeeee(%eax) ; .endr");
 }
+#elif __powerpc64__ /* arch */
 
-#endif /* _PKEYS_HELPER_H */
+#define PAGE_SIZE (0x1UL << 16)
+static inline int cpu_has_pku(void)
+{
+	return 1;
+}
+
+/* 8-bytes of instruction * 16384bytes = 1 page */
+#define __page_o_noops() asm(".rept 16384 ; nop; .endr")
+
+#endif /* arch */
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
 #define ALIGN_UP(x, align_to)	(((x) + ((align_to)-1)) & ~((align_to)-1))
@@ -325,11 +391,72 @@ extern void abort_hooks(void);
 
 static inline int open_hugepage_file(int flag)
 {
-	return open("/sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages",
+	int fd;
+
+#if defined(__i386__) || defined(__x86_64__) /* arch */
+	fd = open("/sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages",
 		 O_RDONLY);
+#elif __powerpc64__ /* arch */
+	fd = open("/sys/kernel/mm/hugepages/hugepages-16384kB/nr_hugepages",
+		O_RDONLY);
+#else /* arch */
+	NOT SUPPORTED
+#endif /* arch */
+	return fd;
 }
 
 static inline int get_start_key(void)
 {
-	return 1;
+	return 0;
 }
+
+static inline u32 *siginfo_get_pkey_ptr(siginfo_t *si)
+{
+#ifdef si_pkey
+	return &si->si_pkey;
+#else
+
+#ifdef __i386__ /* arch */
+#define si_pkey_offset 0x14
+#elif __x86_64__ /*arch */
+#define si_pkey_offset 0x20
+#elif __powerpc64__ /*arch */
+#define si_pkey_offset 0x20
+#endif /*arch */
+
+	return (u32 *)(((u8 *)si) + si_pkey_offset);
+#endif
+}
+
+static inline int arch_reserved_keys(void)
+{
+#if defined(__i386__) || defined(__x86_64__) /* arch */
+	return NR_RESERVED_PKEYS;
+#elif __powerpc64__ /* arch */
+	if (sysconf(_SC_PAGESIZE) == 4096)
+		return NR_RESERVED_PKEYS_4K;
+	else
+		return NR_RESERVED_PKEYS_64K;
+#else /* arch */
+	NOT SUPPORTED
+#endif /* arch */
+}
+
+void expected_pkey_fault(int pkey);
+
+void expect_fault_on_read_execonly_key(void *p1, u16 pkey)
+{
+	int ptr_contents;
+#ifdef  __powerpc64__
+	/* powerpc does not allow userspace to change permissions of exec-only
+	 * keys since those keys are not allocated by userspace. The signal
+	 * handler wont be able to reset the permissions, which means the code
+	 * will infinitely continue to segfault here.
+	 */
+	return;
+#endif /* arch */
+	ptr_contents = read_ptr(p1);
+	dprintf2("ptr (%p) contents@%d: %x\n", p1, __LINE__, ptr_contents);
+	expected_pkey_fault(pkey);
+}
+#endif /* _PKEYS_HELPER_H */
