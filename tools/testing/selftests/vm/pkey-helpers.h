@@ -293,4 +293,14 @@ extern void abort_hooks(void);
 } while (0)
 #define raw_assert(cond) assert(cond)
 
+static inline int open_hugepage_file(int flag)
+{
+	return open(HUGEPAGE_FILE, flag);
+}
+
+static inline int get_start_key(void)
+{
+	return 1;
+}
+
 #endif /* _PKEYS_HELPER_H */
