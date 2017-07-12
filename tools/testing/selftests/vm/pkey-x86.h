@@ -158,4 +158,9 @@ static inline int arch_reserved_keys(void)
 	return NR_RESERVED_PKEYS;
 }
 
+int sys_subpage_prot(unsigned long addr, unsigned long len, uint32_t *map)
+{
+	return -ENOSYS;
+}
+
 #endif /* _PKEYS_X86_H */

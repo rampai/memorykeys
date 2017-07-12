@@ -775,6 +775,32 @@ void *malloc_pkey_with_mprotect(long size, int prot, u16 pkey)
 	return ptr;
 }
 
+void *malloc_pkey_with_mprotect_subpage(long size, int prot, u16 pkey)
+{
+	void *ptr;
+	int ret;
+
+	dprintf1("doing %s(size=%ld, prot=0x%x, pkey=%d)\n", __func__,
+			size, prot, pkey);
+	pkey_assert(pkey < NR_PKEYS);
+	ptr = mmap(NULL, size, prot, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+	pkey_assert(ptr != (void *)-1);
+
+	ret = sys_subpage_prot((unsigned long) ptr, size, NULL);
+	if (ret) {
+		perror("subpage_perm");
+		munmap(ptr, size);
+		return PTR_ERR_ENOTSUP;
+	}
+
+	ret = mprotect_pkey(ptr, PAGE_SIZE, prot, pkey);
+	pkey_assert(!ret);
+	record_pkey_malloc(ptr, size);
+
+	dprintf1("%s() for pkey %d @ %p\n", __func__, pkey, ptr);
+	return ptr;
+}
+
 void *malloc_pkey_anon_huge(long size, int prot, u16 pkey)
 {
 	int ret;
@@ -898,7 +924,10 @@ void *(*pkey_malloc[])(long size, int prot, u16 pkey) = {
 
 	malloc_pkey_with_mprotect,
 	malloc_pkey_anon_huge,
-	malloc_pkey_hugetlb
+	malloc_pkey_hugetlb,
+#ifdef __powerpc64__
+	malloc_pkey_with_mprotect_subpage,
+#endif
 /* can not do direct with the pkey_mprotect() API:
 	malloc_pkey_mmap_direct,
 	malloc_pkey_mmap_dax,

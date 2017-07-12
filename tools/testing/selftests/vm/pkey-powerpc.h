@@ -80,4 +80,9 @@ static inline int arch_reserved_keys(void)
 		return NR_RESERVED_PKEYS_64K;
 }
 
+int sys_subpage_prot(unsigned long addr, unsigned long len, uint32_t *map)
+{
+	return syscall(__NR_subpage_prot, addr, len, map);
+}
+
 #endif /* _PKEYS_POWERPC_H */
