@@ -49,33 +49,8 @@ int iteration_nr = 1;
 int test_nr;
 
 unsigned int shadow_pkey_reg;
-
-#define HPAGE_SIZE	(1UL<<21)
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
-#define ALIGN_UP(x, align_to)	(((x) + ((align_to)-1)) & ~((align_to)-1))
-#define ALIGN_DOWN(x, align_to) ((x) & ~((align_to)-1))
-#define ALIGN_PTR_UP(p, ptr_align_to)	((typeof(p))ALIGN_UP((unsigned long)(p),	ptr_align_to))
-#define ALIGN_PTR_DOWN(p, ptr_align_to)	((typeof(p))ALIGN_DOWN((unsigned long)(p),	ptr_align_to))
-#define __stringify_1(x...)     #x
-#define __stringify(x...)       __stringify_1(x)
-
-#define PTR_ERR_ENOTSUP ((void *)-ENOTSUP)
-
 int dprint_in_signal;
 char dprint_in_signal_buffer[DPRINT_IN_SIGNAL_BUF_SIZE];
-
-extern void abort_hooks(void);
-#define pkey_assert(condition) do {		\
-	if (!(condition)) {			\
-		dprintf0("assert() at %s::%d test_nr: %d iteration: %d\n", \
-				__FILE__, __LINE__,	\
-				test_nr, iteration_nr);	\
-		dprintf0("errno at assert: %d", errno);	\
-		abort_hooks();			\
-		assert(condition);		\
-	}					\
-} while (0)
-#define raw_assert(cond) assert(cond)
 
 void cat_into_file(char *str, char *file)
 {
@@ -154,12 +129,6 @@ void abort_hooks(void)
 #endif
 }
 
-static inline void __page_o_noops(void)
-{
-	/* 8-bytes of instruction * 512 bytes = 1 page */
-	asm(".rept 512 ; nopl 0x7eeeeeee(%eax) ; .endr");
-}
-
 /*
  * This attempts to have roughly a page of instructions followed by a few
  * instructions that do a write, and another page of instructions.  That
@@ -181,38 +150,6 @@ void lots_o_noops_around_write(int *write_to_me)
 	__page_o_noops();
 	dprintf3("%s() done\n", __func__);
 }
-
-/* Define some kernel-like types */
-#define  u8 uint8_t
-#define u16 uint16_t
-#define u32 uint32_t
-#define u64 uint64_t
-
-#ifdef __i386__
-
-#ifndef SYS_mprotect_key
-# define SYS_mprotect_key 380
-#endif
-#ifndef SYS_pkey_alloc
-# define SYS_pkey_alloc	 381
-# define SYS_pkey_free	 382
-#endif
-#define REG_IP_IDX REG_EIP
-#define si_pkey_offset 0x14
-
-#else
-
-#ifndef SYS_mprotect_key
-# define SYS_mprotect_key 329
-#endif
-#ifndef SYS_pkey_alloc
-# define SYS_pkey_alloc	 330
-# define SYS_pkey_free	 331
-#endif
-#define REG_IP_IDX REG_RIP
-#define si_pkey_offset 0x20
-
-#endif
 
 void dump_mem(void *dumpme, int len_bytes)
 {
@@ -396,8 +333,33 @@ pid_t fork_lazy_child(void)
 	return forkret;
 }
 
-#define PKEY_DISABLE_ACCESS    0x1
-#define PKEY_DISABLE_WRITE     0x2
+void davecmp(void *_a, void *_b, int len)
+{
+	int i;
+	unsigned long *a = _a;
+	unsigned long *b = _b;
+
+	for (i = 0; i < len / sizeof(*a); i++) {
+		if (a[i] == b[i])
+			continue;
+
+		dprintf3("[%3d]: a: %016lx b: %016lx\n", i, a[i], b[i]);
+	}
+}
+
+void dumpit(char *f)
+{
+	int fd = open(f, O_RDONLY);
+	char buf[100];
+	int nr_read;
+
+	dprintf2("maps fd: %d\n", fd);
+	do {
+		nr_read = read(fd, &buf[0], sizeof(buf));
+		write(1, buf, nr_read);
+	} while (nr_read > 0);
+	close(fd);
+}
 
 u32 pkey_get(int pkey, unsigned long flags)
 {
