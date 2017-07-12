@@ -929,16 +929,19 @@ void *malloc_pkey(long size, int prot, u16 pkey)
 int last_pkey_faults;
 void expected_pkey_fault(int pkey)
 {
+	pkey_reg_t mask = left_shift_bits(pkey,
+				  PKEY_DISABLE_ACCESS | PKEY_DISABLE_WRITE);
+
 	dprintf2("%s(): last_pkey_faults: %d pkey_faults: %d\n",
 			__func__, last_pkey_faults, pkey_faults);
 	dprintf2("%s(%d): last_si_pkey: %d\n", __func__, pkey, last_si_pkey);
 	pkey_assert(last_pkey_faults + 1 == pkey_faults);
 	pkey_assert(last_si_pkey == pkey);
 	/*
-	 * The signal handler shold have cleared out PKEY register to let the
+	 * The signal handler should have cleared out pkey-register to let the
 	 * test program continue.  We now have to restore it.
 	 */
-	if (__read_pkey_reg() != 0)
+	if (__read_pkey_reg() & mask)
 		pkey_assert(0);
 
 	__write_pkey_reg(shadow_pkey_reg);
