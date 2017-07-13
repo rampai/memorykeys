@@ -22,6 +22,18 @@ extern u32 initial_allocation_mask;/* bits set for reserved keys */
 #define VM_PKEY_BIT4	VM_HIGH_ARCH_4
 #endif
 
+/* override any generic PKEY Permission defines */
+#undef  PKEY_DISABLE_ACCESS
+#define PKEY_DISABLE_ACCESS    0x1
+#undef  PKEY_DISABLE_WRITE
+#define PKEY_DISABLE_WRITE     0x2
+#undef  PKEY_DISABLE_EXECUTE
+#define PKEY_DISABLE_EXECUTE   0x4
+#undef  PKEY_ACCESS_MASK
+#define PKEY_ACCESS_MASK       (PKEY_DISABLE_ACCESS |\
+				PKEY_DISABLE_WRITE  |\
+				PKEY_DISABLE_EXECUTE)
+
 #define arch_max_pkey()  pkeys_total
 #define AMR_RD_BIT 0x1UL
 #define AMR_WR_BIT 0x2UL
