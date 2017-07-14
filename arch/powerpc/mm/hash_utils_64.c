@@ -35,6 +35,7 @@
 #include <linux/memblock.h>
 #include <linux/context_tracking.h>
 #include <linux/libfdt.h>
+#include <linux/pkeys.h>
 
 #include <asm/debugfs.h>
 #include <asm/processor.h>
@@ -1065,6 +1066,7 @@ void hash__early_init_mmu_secondary(void)
 	}
 	/* Initialize SLB */
 	slb_initialize();
+	pkey_init();
 }
 #endif /* CONFIG_SMP */
 
