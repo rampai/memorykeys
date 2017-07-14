@@ -142,5 +142,10 @@ static inline bool arch_vma_access_permitted(struct vm_area_struct *vma,
 	/* by default, allow everything */
 	return true;
 }
+
+#ifndef CONFIG_PPC_MEM_KEYS
+#define pkey_initialize()
+#endif /* CONFIG_PPC_MEM_KEYS */
+
 #endif /* __KERNEL__ */
 #endif /* __ASM_POWERPC_MMU_CONTEXT_H */
