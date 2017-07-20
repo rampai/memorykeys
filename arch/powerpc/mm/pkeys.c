@@ -33,20 +33,21 @@ void __init pkey_initialize(void)
 	BUILD_BUG_ON(PKEY_DISABLE_EXECUTE &
 		     (PKEY_DISABLE_ACCESS | PKEY_DISABLE_WRITE));
 
-	/*
-	 * Disable the pkey system till everything is in place. A subsequent
-	 * patch will enable it.
-	 */
-	pkey_inited = false;
+	if (pkey_mmu_enabled())
+		pkey_inited = !radix_enabled();
+
+	if (!pkey_inited)
+		return;
 
 	/*
-	 * Disable execute_disable support for now. A subsequent patch will
-	 * it.
+	 * The device tree cannot be relied on for execute_disable support.
+	 * Hence we depend on CPU FTR.
 	 */
-	pkey_execute_disable_support = false;
+	pkey_execute_disable_support = cpu_has_feature(CPU_FTR_PKEY_EXECUTE);
 
-	/* Lets assume 32 keys */
-	pkeys_total = 32;
+	/* Let's assume 32 keys if we are not told the number of pkeys. */
+	if (!pkeys_total)
+		pkeys_total = 32;
 
 	/* 
 	 * Adjust the upper limit, based on the number of bits supported by
