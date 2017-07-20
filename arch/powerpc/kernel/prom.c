@@ -35,6 +35,7 @@
 #include <linux/of_fdt.h>
 #include <linux/libfdt.h>
 #include <linux/cpu.h>
+#include <linux/pkeys.h>
 
 #include <asm/prom.h>
 #include <asm/rtas.h>
@@ -228,6 +229,23 @@ static void __init check_cpu_pa_features(unsigned long node)
 		      ibm_pa_features, ARRAY_SIZE(ibm_pa_features));
 }
 
+static void __init check_cpu_pkey_feature(unsigned long node)
+{
+	const __be32 *ftrs;
+	int len, total_data, total_execute;
+
+	ftrs = of_get_flat_dt_prop(node,
+		"ibm,processor-storage-keys", &len);
+	if (ftrs == NULL)
+		return;
+
+	len /= sizeof(int);
+	total_execute = (len >= 2) ? be32_to_cpu(ftrs[1]) : 0;
+	total_data = (len >= 1) ? be32_to_cpu(ftrs[0]) : 0;
+	pkey_mmu_values(total_data, total_execute);
+}
+
+
 #ifdef CONFIG_PPC_STD_MMU_64
 static void __init init_mmu_slb_size(unsigned long node)
 {
@@ -391,6 +409,7 @@ static int __init early_init_dt_scan_cpus(unsigned long node,
 
 		check_cpu_feature_properties(node);
 		check_cpu_pa_features(node);
+		check_cpu_pkey_feature(node);
 	}
 
 	identical_pvr_fixup(node);
