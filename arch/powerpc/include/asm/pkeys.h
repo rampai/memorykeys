@@ -1,6 +1,8 @@
 #ifndef _ASM_PPC64_PKEYS_H
 #define _ASM_PPC64_PKEYS_H
 
+#include <asm/firmware.h>
+
 extern bool pkey_inited;
 extern int pkeys_total; /* total pkeys as per device tree */
 extern u32 initial_allocation_mask;/* bits set for reserved keys */
@@ -227,18 +229,40 @@ static inline void pkey_mm_init(struct mm_struct *mm)
 	mm->context.execute_only_pkey = -1;
 }
 
+static inline void pkey_mmu_values(int total_data, int total_execute)
+{
+	/*
+	 * since any pkey can be used for data or execute, we
+	 * will  just  treat all keys as equal and track them
+	 * as one entity.
+	 */
+	pkeys_total = total_data + total_execute;
+}
+
+static inline bool pkey_mmu_enabled(void)
+{
+	if (firmware_has_feature(FW_FEATURE_LPAR))
+		return pkeys_total;
+	else
+		return cpu_has_feature(CPU_FTR_PKEY);
+}
+
 static inline void pkey_initialize(void)
 {
 	int os_reserved, i;
 
-	/* disable the pkey system till everything
-	 * is in place. A patch further down the
-	 * line will enable it.
-	 */
 	pkey_inited = false;
+	if (pkey_mmu_enabled())
+		pkey_inited = !radix_enabled();
 
-	/* Lets assume 32 keys */
-	pkeys_total = 32;
+	if (!pkey_inited)
+		return;
+
+	/* Lets assume 32 keys if we are not told
+	 * the number of pkeys.
+	 */
+	if (!pkeys_total)
+		pkeys_total = 32;
 
 #ifdef CONFIG_PPC_4K_PAGES
 	/*
