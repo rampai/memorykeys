@@ -148,6 +148,7 @@ static inline bool arch_vma_access_permitted(struct vm_area_struct *vma,
 
 #define pkey_initialize()
 #define pkey_mm_init(mm)
+#define pkey_mmu_values(total_data, total_execute)
 
 static inline int vma_pkey(struct vm_area_struct *vma)
 {
