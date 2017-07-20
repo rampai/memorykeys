@@ -13,6 +13,7 @@
 #define _ASM_POWERPC_KEYS_H
 
 #include <linux/jump_label.h>
+#include <asm/firmware.h>
 
 DECLARE_STATIC_KEY_TRUE(pkey_disabled);
 extern int pkeys_total; /* total pkeys as per device tree */
@@ -225,6 +226,15 @@ static inline void pkey_mm_init(struct mm_struct *mm)
 	mm_pkey_allocation_map(mm) = initial_allocation_mask;
 	/* -1 means unallocated or invalid */
 	mm->context.execute_only_pkey = -1;
+}
+
+static inline void pkey_mmu_values(int total_data, int total_execute)
+{
+	/*
+	 * Since any pkey can be used for data or execute, we will just treat
+	 * all keys as equal and track them as one entity.
+	 */
+	pkeys_total = total_data;
 }
 
 extern void thread_pkey_regs_save(struct thread_struct *thread);

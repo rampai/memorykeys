@@ -26,6 +26,14 @@ u64  pkey_iamr_mask;		/* Bits in AMR not to be touched */
 #define PKEY_REG_BITS (sizeof(u64)*8)
 #define pkeyshift(pkey) (PKEY_REG_BITS - ((pkey+1) * AMR_BITS_PER_PKEY))
 
+static inline bool pkey_mmu_enabled(void)
+{
+	if (firmware_has_feature(FW_FEATURE_LPAR))
+		return pkeys_total;
+	else
+		return cpu_has_feature(CPU_FTR_PKEY);
+}
+
 void __init pkey_initialize(void)
 {
 	int os_reserved, i;
@@ -46,14 +54,9 @@ void __init pkey_initialize(void)
 		     __builtin_popcountl(ARCH_VM_PKEY_FLAGS >> VM_PKEY_SHIFT)
 				!= (sizeof(u64) * BITS_PER_BYTE));
 
-	/*
-	 * Disable the pkey system till everything is in place. A subsequent
-	 * patch will enable it.
-	 */
-	static_branch_enable(&pkey_disabled);
-
-	/* Lets assume 32 keys */
-	pkeys_total = 32;
+	/* Let's assume 32 keys if we are not told the number of pkeys. */
+	if (!pkeys_total)
+		pkeys_total = 32;
 
 	/*
 	 * Adjust the upper limit, based on the number of bits supported by
@@ -62,11 +65,19 @@ void __init pkey_initialize(void)
 	pkeys_total = min_t(int, pkeys_total,
 			(ARCH_VM_PKEY_FLAGS >> VM_PKEY_SHIFT));
 
+	if (!pkey_mmu_enabled() || radix_enabled() || !pkeys_total)
+		static_branch_enable(&pkey_disabled);
+	else
+		static_branch_disable(&pkey_disabled);
+
+	if (static_branch_likely(&pkey_disabled))
+		return;
+
 	/*
-	 * Disable execute_disable support for now. A subsequent patch will
-	 * enable it.
+	 * The device tree cannot be relied on for execute_disable support.
+	 * Hence we depend on CPU FTR.
 	 */
-	pkey_execute_disable_supported = false;
+	pkey_execute_disable_supported = cpu_has_feature(CPU_FTR_PKEY_EXECUTE);
 
 #ifdef CONFIG_PPC_4K_PAGES
 	/*

@@ -152,6 +152,7 @@ static inline bool arch_vma_access_permitted(struct vm_area_struct *vma,
 #define thread_pkey_regs_save(thread)
 #define thread_pkey_regs_restore(new_thread, old_thread)
 #define thread_pkey_regs_init(thread)
+#define pkey_mmu_values(total_data, total_execute)
 
 static inline int vma_pkey(struct vm_area_struct *vma)
 {
