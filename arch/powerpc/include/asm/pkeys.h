@@ -1,6 +1,8 @@
 #ifndef _ASM_PPC64_PKEYS_H
 #define _ASM_PPC64_PKEYS_H
 
+#include <asm/firmware.h>
+
 extern bool pkey_inited;
 /* override any generic PKEY Permission defines */
 #undef  PKEY_DISABLE_ACCESS
@@ -215,12 +217,35 @@ static inline void pkey_mm_init(struct mm_struct *mm)
 	mm->context.execute_only_pkey = -1;
 }
 
+extern int pkeys_total_execute;/* total execute pkeys as per device tree */
+extern int pkeys_total;	/* total pkeys as per device tree */
+
+static inline void pkey_mmu_values(int total, int total_execute)
+{
+	/*
+	* Since these values are reported by the device tree
+	* and its not clear what exactly they mean,
+	* we will not rely on them, other than to indicate
+	* that mmu supports pkey
+	*/
+	pkeys_total_execute = total_execute;
+	pkeys_total = total;
+}
+
+static inline bool pkey_mmu_enabled(void)
+{
+	if (firmware_has_feature(FW_FEATURE_LPAR))
+		return pkeys_total_execute || pkeys_total;
+	else
+		return cpu_has_feature(CPU_FTR_PKEY);
+}
+
 static inline void pkey_initialize(void)
 {
-#ifdef CONFIG_PPC_64K_PAGES
-	pkey_inited = !radix_enabled();
-#else
 	pkey_inited = false;
+#ifdef CONFIG_PPC_64K_PAGES
+	if (pkey_mmu_enabled())
+		pkey_inited = !radix_enabled();
 #endif
 }
 #endif /*_ASM_PPC64_PKEYS_H */
