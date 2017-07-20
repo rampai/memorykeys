@@ -38,15 +38,24 @@ void __init pkey_initialize(void)
 	 * line will enable it.
 	 */
 	pkey_inited = false;
+	if (pkey_mmu_enabled())
+		pkey_inited = !radix_enabled();
+	if (!pkey_inited)
+		return;
 
 	/*
-	 * disable execute_disable support for now.
-	 * A patch further down will enable it.
+	 * the device tree cannot be relied on for 
+	 * execute_disable support. Hence we depend
+	 * on CPU FTR.
 	 */
-	pkey_execute_disable_support = false;
+	pkey_execute_disable_support = cpu_has_feature(CPU_FTR_PKEY_EXECUTE);
 
-	/* Lets assume 32 keys */
-	pkeys_total = 32;
+	/*
+	 * Lets assume 32 keys if we are not told
+	 * the number of pkeys.
+	 */
+	if (!pkeys_total)
+		pkeys_total = 32;
 
 #ifdef CONFIG_PPC_4K_PAGES
 	/*
