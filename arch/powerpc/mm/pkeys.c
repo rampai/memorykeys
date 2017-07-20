@@ -16,6 +16,7 @@
 #include <linux/pkeys.h>                /* PKEY_*                       */
 
 bool pkey_inited;
+bool pkey_execute_disable_support;
 int  pkeys_total;		/* total pkeys as per device tree */
 u32  initial_allocation_mask;	/* bits set for reserved keys */
 
@@ -23,14 +24,28 @@ void pkey_initialize(void)
 {
 	int os_reserved, i;
 
-	/* disable the pkey system till everything
-	 * is in place. A patch further down the
-	 * line will enable it.
-	 */
 	pkey_inited = false;
+	if (pkey_mmu_enabled())
+		pkey_inited = !radix_enabled();
 
-	/* Lets assume 32 keys */
-	pkeys_total = 32;
+	if (!pkey_inited)
+		return;
+
+	/* 
+	 * On LPAR, device  tree  informs  us  the availabilty 
+	 * of  execute_disable  support. On non-LPAR we depend
+	 * on CPU feature to determine execute_disable support.
+	 */
+	if (!firmware_has_feature(FW_FEATURE_LPAR) && 
+		cpu_has_feature(CPU_FTR_PKEY_EXECUTE))
+		pkey_execute_disable_support = true;
+
+	/*
+	 * Lets assume 32 keys if we are not told
+	 * the number of pkeys.
+	 */
+	if (!pkeys_total)
+		pkeys_total = 32;
 
 #ifdef CONFIG_PPC_4K_PAGES
 	/*
@@ -118,6 +133,13 @@ int __arch_set_user_pkey_access(struct task_struct *tsk, int pkey,
 	if (!is_pkey_enabled(pkey))
 		return -EINVAL;
 
+	if ((init_val & PKEY_DISABLE_EXECUTE)) {
+		if (!pkey_execute_disable_support)
+			return -EINVAL;
+		new_iamr_bits |= IAMR_EX_BIT;
+	}
+	init_iamr(pkey, new_iamr_bits);
+
 	/* Set the bits we need in AMR:  */
 	if (init_val & PKEY_DISABLE_ACCESS)
 		new_amr_bits |= AMR_RD_BIT | AMR_WR_BIT;
@@ -126,10 +148,6 @@ int __arch_set_user_pkey_access(struct task_struct *tsk, int pkey,
 
 	init_amr(pkey, new_amr_bits);
 
-	if ((init_val & PKEY_DISABLE_EXECUTE))
-		new_iamr_bits |= IAMR_EX_BIT;
-
-	init_iamr(pkey, new_iamr_bits);
 	return 0;
 }
 
@@ -187,6 +205,9 @@ int __execute_only_pkey(struct mm_struct *mm)
 	bool need_to_set_mm_pkey = false;
 	int execute_only_pkey = mm->context.execute_only_pkey;
 	int ret;
+
+	if (!pkey_execute_disable_support)
+		return -1;
 
 	/* Do we need to assign a pkey for mm's execute-only maps? */
 	if (execute_only_pkey == -1) {
