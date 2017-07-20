@@ -16,6 +16,9 @@
 #include <linux/pkeys.h>                /* PKEY_*                       */
 
 bool pkey_inited;
+int pkeys_total_execute;/* total execute pkeys as per device tree */
+int pkeys_total;	/* total pkeys as per device tree */
+
 #define pkeyshift(pkey) ((arch_max_pkey()-pkey-1) * AMR_BITS_PER_PKEY)
 static bool is_pkey_enabled(int pkey)
 {
