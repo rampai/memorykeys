@@ -1,9 +1,12 @@
 #ifndef _ASM_PPC64_PKEYS_H
 #define _ASM_PPC64_PKEYS_H
 
+#include <asm/firmware.h>
+
 extern bool pkey_inited;
 extern bool pkey_execute_disable_support;
 extern int pkeys_total; /* total pkeys as per device tree */
+extern int pkey_total_execute; /* total execute pkeys as per device tree */
 extern u32 initial_allocation_mask;/* bits set for reserved keys */
 
 /*
@@ -219,6 +222,24 @@ static inline void pkey_mm_init(struct mm_struct *mm)
 	mm_pkey_allocation_map(mm) = initial_allocation_mask;
 	/* -1 means unallocated or invalid */
 	mm->context.execute_only_pkey = -1;
+}
+
+static inline void pkey_mmu_values(int total_data, int total_execute)
+{
+	/*
+	 * since any pkey can be used for data or execute, we
+	 * will  just  treat all keys as equal and track them
+	 * as one entity.
+	 */
+	pkeys_total = total_data;
+}
+
+static inline bool pkey_mmu_enabled(void)
+{
+	if (firmware_has_feature(FW_FEATURE_LPAR))
+		return pkeys_total;
+	else
+		return cpu_has_feature(CPU_FTR_PKEY);
 }
 
 extern void thread_pkey_regs_save(struct thread_struct *thread);
