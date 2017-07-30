@@ -3,6 +3,22 @@
 
 extern bool pkey_inited;
 extern bool pkey_execute_disable_support;
+
+/*
+ * powerpc needs an additional vma bit to support 32 keys.
+ * Till the additional vma bit lands in include/linux/mm.h
+ * we have to carry the hunk below. This is  needed to get
+ * pkeys working on power. -- Ram
+ */
+#ifndef VM_PKEY_BIT4
+#define VM_PKEY_SHIFT VM_HIGH_ARCH_BIT_0
+#define VM_PKEY_BIT0	VM_HIGH_ARCH_0
+#define VM_PKEY_BIT1	VM_HIGH_ARCH_1
+#define VM_PKEY_BIT2	VM_HIGH_ARCH_2
+#define VM_PKEY_BIT3	VM_HIGH_ARCH_3
+#define VM_PKEY_BIT4	VM_HIGH_ARCH_4
+#endif
+
 #define ARCH_VM_PKEY_FLAGS 0
 
 static inline bool mm_pkey_is_allocated(struct mm_struct *mm, int pkey)
