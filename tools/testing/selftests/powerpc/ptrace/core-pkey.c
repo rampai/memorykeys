@@ -11,6 +11,8 @@
  */
 #include <limits.h>
 #include <semaphore.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 #include "ptrace.h"
 
 #ifndef __NR_pkey_alloc
@@ -199,6 +201,16 @@ static int trace_pkey_write(pid_t child, unsigned long amr)
 	return TEST_PASS;
 }
 
+static int increase_core_file_limit(void)
+{
+	struct rlimit rlim;
+	int ret;
+
+	ret = getrlimit(RLIMIT_CORE, &rlim);
+
+	ret = getrlimit(RLIMIT_FSIZE, &rlim);
+}
+
 static int child(struct shared_info *info)
 {
 	unsigned long reg;
@@ -307,9 +319,9 @@ static int parent(struct shared_info *info, pid_t pid)
 	return ret;
 }
 
-static int write_core_pattern(const char *buf)
+static int write_core_pattern(const char *core_pattern)
 {
-	size_t len = strlen(buf), ret;
+	size_t len = strlen(core_pattern), ret;
 	FILE *f;
 
 	f = fopen(core_pattern_file, "w");
@@ -318,7 +330,7 @@ static int write_core_pattern(const char *buf)
 		return TEST_FAIL;
 	}
 
-	ret = frwite(buf, 1, len, f);
+	ret = frwite(core_pattern, 1, len, f);
 	fclose(f);
 	if (ret != len) {
 		perror("Error writing to core_pattern file");
@@ -328,18 +340,14 @@ static int write_core_pattern(const char *buf)
 	return TEST_PASS;
 }
 
-static int core_pkey(void)
+static int setup_core_pattern(char **core_pattern_, bool *changed_)
 {
 	FILE *f;
-	char *buf;
-	bool changed_core_pattern;
-	struct shared_info *info;
-	int shm_id;
+	char *core_pattern;
 	int ret;
-	pid_t pid;
 
-	buf = malloc(MAX_PATH);
-	if (!buf) {
+	core_pattern = malloc(MAX_PATH);
+	if (!core_pattern) {
 		perror("Error allocating memory");
 		return TEST_FAIL;
 	}
@@ -351,7 +359,7 @@ static int core_pkey(void)
 		goto out;
 	}
 
-	ret = fread(buf, 1, MAX_PATH, f);
+	ret = fread(core_pattern, 1, MAX_PATH, f);
 	fclose(f);
 	if (!ret) {
 		perror("Error reading core_pattern file");
@@ -359,14 +367,38 @@ static int core_pkey(void)
 		goto out;
 	}
 
-	if (strcmp(buf, "core")) {
+	if (strcmp(core_pattern, "core")) {
 		ret = write_core_pattern("core");
 		if (ret)
 			goto out;
 
-		changed_core_pattern = true;
+		*changed_ = true;
 	} else
-		changed_core_pattern = false;
+		*changed_ = false;
+
+	*core_pattern_ = core_pattern;
+	ret = TEST_PASS;
+
+ out:
+	if (ret)
+		free(core_pattern);
+
+	return ret;
+}
+
+static int core_pkey(void)
+{
+	FILE *f;
+	char *core_pattern;
+	bool changed_core_pattern;
+	struct shared_info *info;
+	int shm_id;
+	int ret;
+	pid_t pid;
+
+	ret = setup_core_pattern(&core_pattern, &changed_core_pattern);
+	if (ret)
+		return ret;
 
 	shm_id = shmget(IPC_PRIVATE, sizeof(*info), 0777 | IPC_CREAT);
 	info = shmat(shm_id, NULL, 0);
@@ -374,12 +406,14 @@ static int core_pkey(void)
 	ret = sem_init(&info->sem_parent, 1, 0);
 	if (ret) {
 		perror("Semaphore initialization failed");
-		return TEST_FAIL;
+		ret = TEST_FAIL;
+		goto out;
 	}
 	ret = sem_init(&info->sem_child, 1, 0);
 	if (ret) {
 		perror("Semaphore initialization failed");
-		return TEST_FAIL;
+		ret = TEST_FAIL;
+		goto out;
 	}
 
 	pid = fork();
@@ -397,13 +431,13 @@ static int core_pkey(void)
 		sem_destroy(&info->sem_parent);
 		sem_destroy(&info->sem_child);
 		shmctl(shm_id, IPC_RMID, NULL);
+
+		if (changed_core_pattern)
+			write_core_pattern(core_pattern);
 	}
 
 out:
-	if (changed_core_pattern)
-		write_core_pattern(buf);
-
-	free(buf);
+	free(core_pattern);
 
 	return ret;
 }
