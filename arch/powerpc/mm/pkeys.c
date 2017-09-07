@@ -374,6 +374,26 @@ bool arch_vma_access_permitted(struct vm_area_struct *vma,
 	return pkey_access_permitted(pkey, write, execute);
 }
 
+unsigned int arch_usable_pkeys(void)
+{
+	unsigned int reserved;
+
+	if (!pkey_inited)
+		return 0;
+
+	/* Reserve one more to account for the execute-only pkey. */
+	reserved = hweight32(initial_allocation_mask) + 1;
+
+	return pkeys_total > reserved ? pkeys_total - reserved : 0;
+}
+
+bool arch_supports_pkeys(int cap)
+{
+	if (cap & PKEY_DISABLE_EXECUTE)
+		return pkey_execute_disable_support;
+	return (cap & (PKEY_DISABLE_ACCESS | PKEY_DISABLE_WRITE));
+}
+
 long sys_pkey_modify(int pkey, unsigned long new_val)
 {
 	/* check for unsupported init values */
