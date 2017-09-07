@@ -123,6 +123,14 @@ int __arch_override_mprotect_pkey(struct vm_area_struct *vma, int prot, int pkey
 	return vma_pkey(vma);
 }
 
+unsigned int arch_usable_pkeys(void)
+{
+	/* Reserve one more to account for the execute-only pkey. */
+	unsigned int reserved = hweight32(PKEY_INITIAL_ALLOCATION_MAP) + 1;
+
+	return arch_max_pkey() > reserved ? arch_max_pkey() - reserved : 0;
+}
+
 #define PKRU_AD_KEY(pkey)	(PKRU_AD_BIT << ((pkey) * PKRU_BITS_PER_PKEY))
 
 /*

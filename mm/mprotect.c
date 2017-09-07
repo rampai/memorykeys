@@ -552,4 +552,92 @@ SYSCALL_DEFINE1(pkey_free, int, pkey)
 	return ret;
 }
 
+#ifdef CONFIG_SYSFS
+
+#define PKEYS_ATTR_RO(_name)						\
+	static struct kobj_attribute _name##_attr = __ATTR_RO(_name)
+
+static ssize_t total_keys_show(struct kobject *kobj,
+			       struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", arch_max_pkey());
+}
+PKEYS_ATTR_RO(total_keys);
+
+static ssize_t usable_keys_show(struct kobject *kobj,
+				struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", arch_usable_pkeys());
+}
+PKEYS_ATTR_RO(usable_keys);
+
+static ssize_t disable_access_supported_show(struct kobject *kobj,
+					      struct kobj_attribute *attr,
+					      char *buf)
+{
+	if (arch_pkeys_enabled()) {
+		strcpy(buf, "true\n");
+		return sizeof("true\n") - 1;
+	}
+
+	strcpy(buf, "false\n");
+	return sizeof("false\n") - 1;
+}
+PKEYS_ATTR_RO(disable_access_supported);
+
+static ssize_t disable_write_supported_show(struct kobject *kobj,
+					     struct kobj_attribute *attr,
+					     char *buf)
+{
+	if (arch_pkeys_enabled()) {
+		strcpy(buf, "true\n");
+		return sizeof("true\n") - 1;
+	}
+
+	strcpy(buf, "false\n");
+	return sizeof("false\n") - 1;
+}
+PKEYS_ATTR_RO(disable_write_supported);
+
+static ssize_t disable_execute_supported_show(struct kobject *kobj,
+					      struct kobj_attribute *attr,
+					      char *buf)
+{
+#ifdef PKEY_DISABLE_EXECUTE
+	if (arch_supports_pkeys(PKEY_DISABLE_EXECUTE)) {
+		strcpy(buf, "true\n");
+		return sizeof("true\n") - 1;
+	}
+#endif
+
+	strcpy(buf, "false\n");
+	return sizeof("false\n") - 1;
+}
+PKEYS_ATTR_RO(disable_execute_supported);
+
+static struct attribute *pkeys_attrs[] = {
+	&total_keys_attr.attr,
+	&usable_keys_attr.attr,
+	&disable_access_supported_attr.attr,
+	&disable_write_supported_attr.attr,
+	&disable_execute_supported_attr.attr,
+	NULL,
+};
+
+static const struct attribute_group pkeys_attr_group = {
+	.attrs = pkeys_attrs,
+	.name = "protection_keys",
+};
+
+static int __init pkeys_sysfs_init(void)
+{
+	int err;
+
+	err = sysfs_create_group(mm_kobj, &pkeys_attr_group);
+
+	return err;
+}
+late_initcall(pkeys_sysfs_init);
+#endif /* CONFIG_SYSFS */
+
 #endif /* CONFIG_ARCH_HAS_PKEYS */
