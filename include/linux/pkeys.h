@@ -10,6 +10,7 @@
 #define arch_max_pkey() (1)
 #define execute_only_pkey(mm) (0)
 #define arch_override_mprotect_pkey(vma, prot, pkey) (0)
+#define arch_usable_pkeys() (0)
 #define PKEY_DEDICATED_EXECUTE_ONLY 0
 #define ARCH_VM_PKEY_FLAGS 0
 
@@ -42,7 +43,6 @@ static inline bool arch_pkeys_enabled(void)
 static inline void copy_init_pkru_to_fpregs(void)
 {
 }
-
 #endif /* ! CONFIG_ARCH_HAS_PKEYS */
 
 #endif /* _LINUX_PKEYS_H */
