@@ -43,6 +43,10 @@ static inline void copy_init_pkru_to_fpregs(void)
 {
 }
 
+unsigned int arch_usable_pkeys(void)
+{
+	return 0;
+}
 #endif /* ! CONFIG_ARCH_HAS_PKEYS */
 
 #endif /* _LINUX_PKEYS_H */
