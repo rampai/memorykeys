@@ -242,6 +242,8 @@ static inline bool pkey_mmu_enabled(void)
 		return cpu_has_feature(CPU_FTR_PKEY);
 }
 
+extern bool arch_supports_pkeys(int cap);
+extern unsigned int arch_usable_pkeys(void);
 extern void thread_pkey_regs_save(struct thread_struct *thread);
 extern void thread_pkey_regs_restore(struct thread_struct *new_thread,
 			struct thread_struct *old_thread);
