@@ -455,6 +455,15 @@ _GLOBAL(ppc_switch_endian)
 	bl	sys_switch_endian
 	b	.Lsyscall_exit
 
+_GLOBAL(ppc_pkey_modify)
+	bl	save_nvgprs
+#ifdef  CONFIG_PPC64_MEMORY_PROTECTION_KEYS
+	bl	sys_pkey_modify
+#else
+	bl	sys_ni_syscall
+#endif
+	b	.Lsyscall_exit
+
 _GLOBAL(ret_from_fork)
 	bl	schedule_tail
 	REST_NVGPRS(r1)
