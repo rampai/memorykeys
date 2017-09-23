@@ -368,3 +368,12 @@ bool arch_vma_access_permitted(struct vm_area_struct *vma, bool write,
 
 	return pkey_access_permitted(pkey, write, execute);
 }
+
+long sys_pkey_modify(int pkey, unsigned long new_val)
+{
+	/* Check for unsupported init values */
+	if (new_val & ~PKEY_ACCESS_MASK)
+		return -EINVAL;
+
+	return __arch_set_user_pkey_access(current, pkey, new_val);
+}
