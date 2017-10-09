@@ -15,9 +15,7 @@ extern u32 initial_allocation_mask;/* bits set for reserved keys */
  * we have to carry the hunk below. This is  needed to get
  * pkeys working on power. -- Ram
  */
-#ifndef VM_HIGH_ARCH_BIT_4
-#define VM_HIGH_ARCH_BIT_4	36
-#define VM_HIGH_ARCH_4	BIT(VM_HIGH_ARCH_BIT_4)
+#ifndef VM_PKEY_BIT4
 #define VM_PKEY_SHIFT VM_HIGH_ARCH_BIT_0
 #define VM_PKEY_BIT0	VM_HIGH_ARCH_0
 #define VM_PKEY_BIT1	VM_HIGH_ARCH_1
