@@ -868,7 +868,7 @@ config PPC64_MEMORY_PROTECTION_KEYS
 	prompt "PowerPC Memory Protection Keys"
 	def_bool y
 	# Note: only available in 64-bit mode
-	depends on PPC64
+	depends on PPC_BOOK3S_64
 	select ARCH_USES_HIGH_VMA_FLAGS
 	select ARCH_HAS_PKEYS
 	---help---
