@@ -237,6 +237,8 @@ static inline void pkey_mmu_values(int total_data, int total_execute)
 	pkeys_total = total_data;
 }
 
+extern bool arch_supports_pkeys(int cap);
+extern unsigned int arch_usable_pkeys(void);
 extern void thread_pkey_regs_save(struct thread_struct *thread);
 extern void thread_pkey_regs_restore(struct thread_struct *new_thread,
 				     struct thread_struct *old_thread);
