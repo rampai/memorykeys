@@ -54,9 +54,19 @@ static inline void __write_pkey_reg(pkey_reg_t pkey_reg)
 }
 
 #define PAGE_SIZE (0x1UL << 16)
-static inline int cpu_has_pku(void)
+static inline bool is_pkey_supported(void)
 {
-	return 1;
+	/*
+	 * No simple way to determine this.
+	 * lets try allocating a key and see if it succeeds.
+	 */
+	int ret = sys_pkey_alloc(0, 0);
+
+	if (ret > 0) {
+		sys_pkey_free(ret);
+		return true;
+	}
+	return false;
 }
 
 /* 8-bytes of instruction * 16384bytes = 1 page */

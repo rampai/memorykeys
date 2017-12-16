@@ -64,6 +64,9 @@ static inline void sigsafe_printf(const char *format, ...)
 #define dprintf3(args...) dprintf_level(3, args)
 #define dprintf4(args...) dprintf_level(4, args)
 
+int sys_pkey_alloc(unsigned long flags, u64 init_val);
+int sys_pkey_free(unsigned long pkey);
+
 #if defined(__i386__) || defined(__x86_64__) /* arch */
 #include "pkey-x86.h"
 #elif __powerpc64__ /* arch */
