@@ -1476,7 +1476,12 @@ void run_tests_once(void)
 		pkey_tests[test_nr](ptr, pkey);
 		dprintf1("freeing test memory: %p\n", ptr);
 		free_pkey_malloc(ptr);
+
+		/* restore the permission on the key after use */
+		pkey_access_allow(pkey);
+		pkey_write_allow(pkey);
 		sys_pkey_free(pkey);
+
 
 		dprintf1("pkey_faults: %d\n", pkey_faults);
 		dprintf1("orig_pkey_faults: %d\n", orig_pkey_faults);
