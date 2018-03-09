@@ -88,3 +88,11 @@ with a read():
 The kernel will send a SIGSEGV in both cases, but si_code will be set
 to SEGV_PKERR when violating protection keys versus SEGV_ACCERR when
 the plain mprotect() permissions are violated.
+
+====================== pkey 0 ==================================
+
+Pkey-0 is special. It is implicitly allocated. Applications cannot allocate or
+free that key. This key is the default key that gets associated with a
+addres-space. It can be explicitly associated with any address-space.
+
+================================================================

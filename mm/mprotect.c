@@ -430,7 +430,13 @@ static int do_mprotect_pkey(unsigned long start, size_t len,
 	 * them use it here.
 	 */
 	error = -EINVAL;
-	if ((pkey != -1) && !mm_pkey_is_allocated(current->mm, pkey))
+
+	/*
+	 * pkey-0 is special. It always exists. No need to check if it is
+	 * allocated. Check allocation status of all other keys. pkey=-1
+	 * is not realy a key, it means; use any available key.
+	 */
+	if (pkey && pkey != -1 && !mm_pkey_is_allocated(current->mm, pkey))
 		goto out;
 
 	vma = find_vma(current->mm, start);
@@ -549,6 +555,12 @@ SYSCALL_DEFINE2(pkey_alloc, unsigned long, flags, unsigned long, init_val)
 	if (pkey == -1)
 		goto out;
 
+	if (!pkey) {
+		mm_pkey_free(current->mm, pkey);
+		printk("Internal error, cannot explicitly allocate key-0");
+		goto out;
+	}
+
 	ret = arch_set_user_pkey_access(current, pkey, init_val);
 	if (ret) {
 		mm_pkey_free(current->mm, pkey);
@@ -564,13 +576,20 @@ SYSCALL_DEFINE1(pkey_free, int, pkey)
 {
 	int ret;
 
+	/*
+	 * pkey-0 is special. Userspace can never allocate or free it. It is
+	 * allocated by default. It always exists.
+	 */
+	if (!pkey)
+		return -EINVAL;
+
 	down_write(&current->mm->mmap_sem);
 	ret = mm_pkey_free(current->mm, pkey);
 	up_write(&current->mm->mmap_sem);
 
 	/*
-	 * We could provie warnings or errors if any VMA still
-	 * has the pkey set here.
+	 * We could provide warnings or errors if any VMA still has the pkey
+	 * set here.
 	 */
 	return ret;
 }
