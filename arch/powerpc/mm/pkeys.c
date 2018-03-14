@@ -224,7 +224,10 @@ static void pkey_status_change(int pkey, bool enable)
 	init_amr(pkey, 0x0);
 	init_iamr(pkey, 0x0);
 
-	/* Enable/disable key */
+	/*
+	 * Enable/disable userspace to/from modifying the permissions
+	 * on the key
+	 */
 	old_uamor = read_uamor();
 	if (enable)
 		old_uamor |= (0x3ul << pkeyshift(pkey));
@@ -241,6 +244,29 @@ void __arch_activate_pkey(int pkey)
 void __arch_deactivate_pkey(int pkey)
 {
 	pkey_status_change(pkey, false);
+}
+
+int __mm_pkey_alloc(struct mm_struct *mm)
+{
+	/*
+	 * Note: this is the one and only place we make sure that the pkey is
+	 * valid as far as the hardware is concerned. The rest of the kernel
+	 * trusts that only good, valid pkeys come out of here.
+	 */
+	u32 all_pkeys_mask = (u32)(~(0x0));
+	int ret;
+
+	/*
+	 * Are we out of pkeys? We must handle this specially because ffz()
+	 * behavior is undefined if there are no zeros.
+	 */
+	if (mm_pkey_allocation_map(mm) == all_pkeys_mask)
+		return -1;
+
+	ret = ffz((u32)mm_pkey_allocation_map(mm));
+	__mm_pkey_allocated(mm, ret);
+
+	return ret;
 }
 
 /*
@@ -332,7 +358,7 @@ int __execute_only_pkey(struct mm_struct *mm)
 	/* Do we need to assign a pkey for mm's execute-only maps? */
 	if (execute_only_pkey == -1) {
 		/* Go allocate one to use, which might fail */
-		execute_only_pkey = mm_pkey_alloc(mm);
+		execute_only_pkey = __mm_pkey_alloc(mm);
 		if (execute_only_pkey < 0)
 			return -1;
 		need_to_set_mm_pkey = true;
