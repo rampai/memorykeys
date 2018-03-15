@@ -914,19 +914,27 @@ void *malloc_pkey_mmap_dax(long size, int prot, u16 pkey)
 	return ptr;
 }
 
-void *(*pkey_malloc[])(long size, int prot, u16 pkey) = {
+#define ALLOC_ANY 		0xff
+#define ALLOC_HUGETLB 		0x1
+#define ALLOC_MPROTECT 		0x2
+#define ALLOC_SUBPAGE_MPROTECT 	0x4
+#define ALLOC_ANON_HUGE 	0x8
+#define ALLOC_MMAP_DIRECT 	0x10
+#define ALLOC_MMAP_DAX 		0x20
 
-	malloc_pkey_with_mprotect,
-	malloc_pkey_with_mprotect_subpage,
-	malloc_pkey_anon_huge,
-	malloc_pkey_hugetlb
-/* can not do direct with the pkey_mprotect() API:
-	malloc_pkey_mmap_direct,
-	malloc_pkey_mmap_dax,
-*/
+struct {
+	void *(*pkey_malloc)(long size, int prot, u16 pkey);
+	int flag;
+} pkey_malloc[] = {
+	{ malloc_pkey_with_mprotect, ALLOC_MPROTECT },
+	{ malloc_pkey_with_mprotect_subpage, ALLOC_SUBPAGE_MPROTECT },
+	{ malloc_pkey_anon_huge, ALLOC_ANON_HUGE },
+	{ malloc_pkey_hugetlb, ALLOC_HUGETLB },
+	/*{ malloc_pkey_mmap_direct, ALLOC_MMAP_DIRECT },
+	{ malloc_pkey_mmap_dax, ALLOC_MMAP_DAX },*/
 };
 
-void *malloc_pkey(long size, int prot, u16 pkey)
+void *malloc_pkey(long size, int prot, u16 pkey, int flag)
 {
 	void *ret;
 	static int malloc_type;
@@ -935,14 +943,21 @@ void *malloc_pkey(long size, int prot, u16 pkey)
 	pkey_assert(pkey < NR_PKEYS);
 
 	while (1) {
+
+		if (malloc_type >= nr_malloc_types)
+			malloc_type = (random()%nr_malloc_types);
+
 		pkey_assert(malloc_type < nr_malloc_types);
 
-		ret = pkey_malloc[malloc_type](size, prot, pkey);
+		if (!(pkey_malloc[malloc_type].flag & flag)) {
+			malloc_type++;
+			continue;
+		}
+
+		ret = pkey_malloc[malloc_type].pkey_malloc(size, prot, pkey);
 		pkey_assert(ret != (void *)-1);
 
 		malloc_type++;
-		if (malloc_type >= nr_malloc_types)
-			malloc_type = (random()%nr_malloc_types);
 
 		/* try again if the malloc_type we tried is unsupported */
 		if (ret == PTR_ERR_ENOTSUP)
@@ -1383,23 +1398,26 @@ void test_mprotect_pkey_on_unsupported_cpu(int *ptr, u16 pkey)
 	pkey_assert(sret < 0);
 }
 
-void (*pkey_tests[])(int *ptr, u16 pkey) = {
-	test_read_of_write_disabled_region,
-	test_read_of_access_disabled_region,
-	test_read_of_access_disabled_region_with_page_already_mapped,
-	test_write_of_write_disabled_region,
-	test_write_of_write_disabled_region_with_page_already_mapped,
-	test_write_of_access_disabled_region,
-	test_write_of_access_disabled_region_with_page_already_mapped,
-	test_kernel_write_of_access_disabled_region,
-	test_kernel_write_of_write_disabled_region,
-	test_kernel_gup_of_access_disabled_region,
-	test_kernel_gup_write_to_write_disabled_region,
-	test_executing_on_unreadable_memory,
-	test_ptrace_of_child,
-	test_pkey_syscalls_on_non_allocated_pkey,
-	test_pkey_syscalls_bad_args,
-	test_pkey_alloc_exhaust,
+struct {
+	void (*pkey_tests)(int *ptr, u16 pkey);
+	int flag;
+} pkey_tests[] = {
+	{ test_read_of_write_disabled_region, ALLOC_ANY },
+	{ test_read_of_access_disabled_region, ALLOC_ANY },
+	{ test_read_of_access_disabled_region_with_page_already_mapped, ALLOC_ANY },
+	{ test_write_of_write_disabled_region, ALLOC_ANY },
+	{ test_write_of_write_disabled_region_with_page_already_mapped, ALLOC_ANY },
+	{ test_write_of_access_disabled_region, ALLOC_ANY },
+	{ test_write_of_access_disabled_region_with_page_already_mapped, ALLOC_ANY },
+	{ test_kernel_write_of_access_disabled_region, ALLOC_ANY },
+	{ test_kernel_write_of_write_disabled_region, ALLOC_ANY },
+	{ test_kernel_gup_of_access_disabled_region, ALLOC_ANY },
+	{ test_kernel_gup_write_to_write_disabled_region, ALLOC_ANY },
+	{ test_executing_on_unreadable_memory, ALLOC_ANY },
+	{ test_ptrace_of_child, ALLOC_ANY },
+	{ test_pkey_syscalls_on_non_allocated_pkey, ALLOC_ANY },
+	{ test_pkey_syscalls_bad_args, ALLOC_ANY },
+	{ test_pkey_alloc_exhaust, ALLOC_ANY },
 };
 
 void run_tests_once(void)
@@ -1410,6 +1428,7 @@ void run_tests_once(void)
 	for (test_nr = 0; test_nr < ARRAY_SIZE(pkey_tests); test_nr++) {
 		int pkey;
 		int orig_pkey_faults = pkey_faults;
+		int flag=pkey_tests[test_nr].flag;
 
 		dprintf1("======================\n");
 		dprintf1("test %d preparing...\n", test_nr);
@@ -1417,9 +1436,9 @@ void run_tests_once(void)
 		tracing_on();
 		pkey = alloc_random_pkey();
 		dprintf1("test %d starting with pkey: %d\n", test_nr, pkey);
-		ptr = malloc_pkey(PAGE_SIZE, prot, pkey);
+		ptr = malloc_pkey(PAGE_SIZE, prot, pkey, flag);
 		dprintf1("test %d starting...\n", test_nr);
-		pkey_tests[test_nr](ptr, pkey);
+		pkey_tests[test_nr].pkey_tests(ptr, pkey);
 		dprintf1("freeing test memory: %p\n", ptr);
 		free_pkey_malloc(ptr);
 		sys_pkey_free(pkey);
