@@ -685,10 +685,12 @@ int mprotect_pkey(void *ptr, size_t size, unsigned long orig_prot,
 struct pkey_malloc_record {
 	void *ptr;
 	long size;
+	int  prot;
 };
 struct pkey_malloc_record *pkey_malloc_records;
+struct pkey_malloc_record *pkey_last_malloc_record;
 long nr_pkey_malloc_records;
-void record_pkey_malloc(void *ptr, long size)
+void record_pkey_malloc(void *ptr, long size, int prot)
 {
 	long i;
 	struct pkey_malloc_record *rec = NULL;
@@ -722,6 +724,8 @@ void record_pkey_malloc(void *ptr, long size)
 		(int)(rec - pkey_malloc_records), rec, ptr, size);
 	rec->ptr = ptr;
 	rec->size = size;
+	rec->prot = prot;
+	pkey_last_malloc_record = rec;
 	nr_pkey_malloc_records++;
 }
 
@@ -768,7 +772,7 @@ void *malloc_pkey_with_mprotect(long size, int prot, u16 pkey)
 	pkey_assert(ptr != (void *)-1);
 	ret = mprotect_pkey((void *)ptr, PAGE_SIZE, prot, pkey);
 	pkey_assert(!ret);
-	record_pkey_malloc(ptr, size);
+	record_pkey_malloc(ptr, size, prot);
 	read_pkey_reg();
 
 	dprintf1("%s() for pkey %d @ %p\n", __func__, pkey, ptr);
@@ -795,7 +799,7 @@ void *malloc_pkey_with_mprotect_subpage(long size, int prot, u16 pkey)
 
 	ret = mprotect_pkey(ptr, PAGE_SIZE, prot, pkey);
 	pkey_assert(!ret);
-	record_pkey_malloc(ptr, size);
+	record_pkey_malloc(ptr, size, prot);
 
 	dprintf1("%s() for pkey %d @ %p\n", __func__, pkey, ptr);
 	return ptr;
@@ -815,7 +819,7 @@ void *malloc_pkey_anon_huge(long size, int prot, u16 pkey)
 	size = ALIGN_UP(size, HPAGE_SIZE * 2);
 	ptr = mmap(NULL, size, PROT_NONE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
 	pkey_assert(ptr != (void *)-1);
-	record_pkey_malloc(ptr, size);
+	record_pkey_malloc(ptr, size, prot);
 	mprotect_pkey(ptr, size, prot, pkey);
 
 	dprintf1("unaligned ptr: %p\n", ptr);
@@ -891,7 +895,7 @@ void *malloc_pkey_hugetlb(long size, int prot, u16 pkey)
 	pkey_assert(ptr != (void *)-1);
 	mprotect_pkey(ptr, size, prot, pkey);
 
-	record_pkey_malloc(ptr, size);
+	record_pkey_malloc(ptr, size, prot);
 
 	dprintf1("mmap()'d hugetlbfs for pkey %d @ %p\n", pkey, ptr);
 	return ptr;
@@ -913,7 +917,7 @@ void *malloc_pkey_mmap_dax(long size, int prot, u16 pkey)
 
 	mprotect_pkey(ptr, size, prot, pkey);
 
-	record_pkey_malloc(ptr, size);
+	record_pkey_malloc(ptr, size, prot);
 
 	dprintf1("mmap()'d for pkey %d @ %p\n", pkey, ptr);
 	close(fd);
@@ -979,6 +983,8 @@ void *malloc_pkey(long size, int prot, u16 pkey, int flag)
 	return ret;
 }
 
+#define UNKNOWN_PKEY -2
+
 int last_pkey_faults;
 void expected_pkey_fault(int pkey)
 {
@@ -989,7 +995,15 @@ void expected_pkey_fault(int pkey)
 			__func__, last_pkey_faults, pkey_faults);
 	dprintf2("%s(%d): last_si_pkey: %d\n", __func__, pkey, last_si_pkey);
 	pkey_assert(last_pkey_faults + 1 == pkey_faults);
-	pkey_assert(last_si_pkey == pkey);
+
+       /*
+       * For exec-only memory, we do not know the pkey in
+       * advance, so skip this check.
+       */
+       if (pkey != UNKNOWN_PKEY)
+               pkey_assert(last_si_pkey == pkey);
+
+
 	/*
 	 * The signal handler should have cleared out pkey-register to let the
 	 * test program continue.  We now have to restore it.
@@ -1330,6 +1344,35 @@ void test_pkey_alloc_exhaust(int *ptr, u16 pkey)
 	}
 }
 
+/*
+ * pkey 0 is special.  It is allocated by default, so you do not
+ * have to call pkey_alloc() to use it first.  Make sure that it
+ * is usable.
+ */
+void test_mprotect_with_pkey_0(int *ptr, u16 pkey)
+{
+       long size;
+       int prot;
+
+       assert(pkey_last_malloc_record);
+       size = pkey_last_malloc_record->size;
+       /*
+        * This is a bit of a hack.  But mprotect() requires
+       * huge-page-aligned sizes when operating on hugetlbfs.
+        * So, make sure that we use something that's a multiple
+        * of a huge page when we can.
+        */
+	if (size >= HPAGE_SIZE)
+              size = HPAGE_SIZE;
+	prot = pkey_last_malloc_record->prot;
+
+	/* Use pkey 0 */
+	mprotect_pkey(ptr, size, prot, 0);
+
+	/* Make sure that we can set it back to the original pkey. */
+	mprotect_pkey(ptr, size, prot, pkey);
+}
+
 void test_ptrace_of_child(int *ptr, u16 pkey)
 {
 	__attribute__((__unused__)) int peek_result;
@@ -1406,12 +1449,9 @@ void test_ptrace_of_child(int *ptr, u16 pkey)
 	free(plain_ptr_unaligned);
 }
 
-void test_executing_on_unreadable_memory(int *ptr, u16 pkey)
+void *get_pointer_to_instructions(void)
 {
 	void *p1;
-	int scratch;
-	int ptr_contents;
-	int ret;
 
 	p1 = ALIGN_PTR_UP(&lots_o_noops_around_write, PAGE_SIZE);
 	dprintf3("&lots_o_noops: %p\n", &lots_o_noops_around_write);
@@ -1421,7 +1461,24 @@ void test_executing_on_unreadable_memory(int *ptr, u16 pkey)
 	/* Point 'p1' at the *second* page of the function: */
 	p1 += PAGE_SIZE;
 
+	/*
+        * Try to ensure we fault this in on next touch to ensure
+        * we get an instruction fault as opposed to a data one
+        */
 	madvise(p1, PAGE_SIZE, MADV_DONTNEED);
+
+	return p1;
+}
+
+void test_executing_on_unreadable_memory(int *ptr, u16 pkey)
+{
+	void *p1;
+	int scratch;
+	int ptr_contents;
+	int ret;
+
+	p1 = get_pointer_to_instructions();
+
 	lots_o_noops_around_write(&scratch);
 	ptr_contents = read_ptr(p1);
 	dprintf2("ptr (%p) contents@%d: %x\n", p1, __LINE__, ptr_contents);
@@ -1443,6 +1500,48 @@ void test_executing_on_unreadable_memory(int *ptr, u16 pkey)
 	expected_pkey_fault(pkey);
 }
 
+void test_implicit_mprotect_exec_only_memory(int *ptr, u16 pkey)
+{
+	void *p1;
+	int scratch;
+	int ptr_contents;
+	int ret;
+
+	dprintf1("%s() start\n", __func__);
+
+	p1 = get_pointer_to_instructions();
+	lots_o_noops_around_write(&scratch);
+	ptr_contents = read_ptr(p1);
+	dprintf2("ptr (%p) contents@%d: %x\n", p1, __LINE__, ptr_contents);
+
+	/* Use a *normal* mprotect(), not mprotect_pkey(): */
+	ret = mprotect(p1, PAGE_SIZE, PROT_EXEC);
+	pkey_assert(!ret);
+
+
+	/* Make sure this is an *instruction* fault */
+	madvise(p1, PAGE_SIZE, MADV_DONTNEED);
+	lots_o_noops_around_write(&scratch);
+	do_not_expect_pkey_fault();
+	ptr_contents = read_ptr(p1);
+	dprintf2("ptr (%p) contents@%d: %x\n", p1, __LINE__, ptr_contents);
+	expected_pkey_fault(UNKNOWN_PKEY);
+
+	/*
+        * Put the memory back to non-PROT_EXEC.  Should clear the
+        * exec-only pkey off the VMA and allow it to be readable
+        * again.  Go to PROT_NONE first to check for a kernel bug
+        * that did not clear the pkey when doing PROT_NONE.
+        */
+	ret = mprotect(p1, PAGE_SIZE, PROT_NONE);
+	pkey_assert(!ret);
+
+	ret = mprotect(p1, PAGE_SIZE, PROT_READ|PROT_EXEC);
+	pkey_assert(!ret);
+	ptr_contents = read_ptr(p1);
+	do_not_expect_pkey_fault();
+}
+
 void test_mprotect_pkey_on_unsupported_cpu(int *ptr, u16 pkey)
 {
 	int size = PAGE_SIZE;
@@ -1461,7 +1560,7 @@ struct {
 	void (*pkey_tests)(int *ptr, u16 pkey);
 	int flag;
 } pkey_tests[] = {
-	{ test_read_of_write_disabled_region, ALLOC_ANY },
+	/*{ test_read_of_write_disabled_region, ALLOC_ANY },
 	{ test_read_of_access_disabled_region, ALLOC_ANY },
 	{ test_read_of_access_disabled_region_with_page_already_mapped, ALLOC_ANY },
 	{ test_write_of_write_disabled_region, ALLOC_ANY },
@@ -1472,12 +1571,14 @@ struct {
 	{ test_kernel_write_of_write_disabled_region, ALLOC_ANY },
 	{ test_kernel_gup_of_access_disabled_region, ALLOC_ANY },
 	{ test_kernel_gup_write_to_write_disabled_region, ALLOC_ANY },
-	{ test_executing_on_unreadable_memory, ALLOC_ANY },
+	{ test_executing_on_unreadable_memory, ALLOC_ANY }, */
+	{ test_implicit_mprotect_exec_only_memory, ALLOC_ANY },
+	/*{ test_mprotect_with_pkey_0, ALLOC_ANY },
 	{ test_ptrace_of_child, ALLOC_ANY },
 	{ test_pkey_syscalls_on_non_allocated_pkey, ALLOC_ANY },
 	{ test_pkey_syscalls_bad_args, ALLOC_ANY },
 	{ test_pkey_alloc_exhaust, ALLOC_ANY },
-	{ test_pkey_alloc_free_attach_pkey0, (ALLOC_ANY & ~ALLOC_HUGETLB) },
+	{ test_pkey_alloc_free_attach_pkey0, (ALLOC_ANY & ~ALLOC_HUGETLB) },*/
 };
 
 void run_tests_once(void)
