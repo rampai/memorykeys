@@ -127,16 +127,15 @@ int pkey_initialize(void)
 
 	/* register mask is in BE format */
 	pkey_amr_mask = ~0x0ul;
-	pkey_iamr_mask = ~0x0ul;
+	pkey_amr_mask &= ~(0x3ul << pkeyshift(PKEY_0));
 
-	for (i = 0; i < (pkeys_total - os_reserved); i++) {
-		pkey_amr_mask &= ~(0x3ul << pkeyshift(i));
-		pkey_iamr_mask &= ~(0x1ul << pkeyshift(i));
-	}
-	pkey_amr_mask |= (AMR_RD_BIT|AMR_WR_BIT) << pkeyshift(execute_only_key);
+	pkey_iamr_mask = ~0x0ul;
+	pkey_iamr_mask &= ~(0x3ul << pkeyshift(PKEY_0));
+	pkey_iamr_mask &= ~(0x3ul << pkeyshift(execute_only_key));
 
 	pkey_uamor_mask = ~0x0ul;
 	pkey_uamor_mask &= ~(0x3ul << pkeyshift(PKEY_0));
+	pkey_uamor_mask &= ~(0x3ul << pkeyshift(execute_only_key));
 
 	/* mark the rest of the keys as reserved and hence unavailable */
 	for (i = (pkeys_total - os_reserved); i < pkeys_total; i++) {
