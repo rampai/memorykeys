@@ -19,6 +19,7 @@ u32  reserved_allocation_mask;  /* Bits set for reserved keys */
 u64  pkey_amr_mask;		/* Bits in AMR not to be touched */
 u64  pkey_iamr_mask;		/* Bits in AMR not to be touched */
 u64  pkey_uamor_mask;		/* Bits in UMOR not to be touched */
+u32  execute_only_key = 2;
 
 #define AMR_BITS_PER_PKEY 2
 #define AMR_RD_BIT 0x1UL
@@ -26,7 +27,6 @@ u64  pkey_uamor_mask;		/* Bits in UMOR not to be touched */
 #define IAMR_EX_BIT 0x1UL
 #define PKEY_REG_BITS (sizeof(u64)*8)
 #define pkeyshift(pkey) (PKEY_REG_BITS - ((pkey+1) * AMR_BITS_PER_PKEY))
-#define EXECUTE_ONLY_KEY 2
 
 static void scan_pkey_feature(void)
 {
@@ -122,8 +122,12 @@ int pkey_initialize(void)
 #else
 	os_reserved = 0;
 #endif
+
+	if ((pkeys_total - os_reserved) <= execute_only_key)
+		execute_only_key = -1;
+
 	/* Bits are in LE format. */
-	reserved_allocation_mask = (0x1 << 1) | (0x1 << EXECUTE_ONLY_KEY);
+	reserved_allocation_mask = (0x1 << 1) | (0x1 << execute_only_key);
 	initial_allocation_mask  = reserved_allocation_mask | (0x1 << PKEY_0);
 
 	/* register mask is in BE format */
@@ -132,11 +136,11 @@ int pkey_initialize(void)
 
 	pkey_iamr_mask = ~0x0ul;
 	pkey_iamr_mask &= ~(0x3ul << pkeyshift(PKEY_0));
-	pkey_iamr_mask &= ~(0x3ul << pkeyshift(EXECUTE_ONLY_KEY));
+	pkey_iamr_mask &= ~(0x3ul << pkeyshift(execute_only_key));
 
 	pkey_uamor_mask = ~0x0ul;
 	pkey_uamor_mask &= ~(0x3ul << pkeyshift(PKEY_0));
-	pkey_uamor_mask &= ~(0x3ul << pkeyshift(EXECUTE_ONLY_KEY));
+	pkey_uamor_mask &= ~(0x3ul << pkeyshift(execute_only_key));
 
 	for (i = (pkeys_total - os_reserved); i < pkeys_total; i++)
 		pkey_uamor_mask &= ~(0x3ul << pkeyshift(i));
@@ -151,7 +155,7 @@ void pkey_mm_init(struct mm_struct *mm)
 	if (static_branch_likely(&pkey_disabled))
 		return;
 	mm_pkey_allocation_map(mm) = initial_allocation_mask;
-	mm->context.execute_only_pkey = EXECUTE_ONLY_KEY;
+	mm->context.execute_only_pkey = execute_only_key;
 }
 
 static inline u64 read_amr(void)
