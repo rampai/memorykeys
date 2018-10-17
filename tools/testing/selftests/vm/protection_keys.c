@@ -1278,7 +1278,7 @@ void test_pkey_alloc_exhaust(int *ptr, u16 pkey)
 	 * are reserved. And one key is allocated by the test code and passed
 	 * in via 'pkey' to this function.
 	 */
-	pkey_assert(i >= (NR_PKEYS-arch_reserved_keys()-1));
+	pkey_assert( i >= ( (NR_PKEYS-1) - arch_reserved_keys() ) );
 
 	for (i = 0; i < nr_allocated_pkeys; i++) {
 		err = sys_pkey_free(allocated_pkeys[i]);
