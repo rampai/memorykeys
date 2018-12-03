@@ -1235,6 +1235,20 @@ void test_pkey_syscalls_bad_args(int *ptr, u16 pkey)
 	pkey_assert(err);
 }
 
+void become_child(void)
+{
+	pid_t forkret;
+
+	forkret = fork();
+	pkey_assert(forkret >= 0);
+
+	if (!forkret) {
+		/* in the child */
+		return;
+	}
+	exit(0);
+}
+
 /* Assumes that all pkeys other than 'pkey' are unallocated */
 void test_pkey_alloc_exhaust(int *ptr, u16 pkey)
 {
@@ -1243,7 +1257,7 @@ void test_pkey_alloc_exhaust(int *ptr, u16 pkey)
 	int nr_allocated_pkeys = 0;
 	int i;
 
-	for (i = 0; i < NR_PKEYS*2; i++) {
+	for (i = 0; i < NR_PKEYS*3; i++) {
 		int new_pkey;
 
 		dprintf1("%s() alloc loop: %d\n", __func__, i);
@@ -1259,10 +1273,16 @@ void test_pkey_alloc_exhaust(int *ptr, u16 pkey)
 			dprintf2("%s() failed to allocate pkey "
 					"after %d tries\n",
 				__func__, nr_allocated_pkeys);
-			break;
+		} else {
+			pkey_assert(nr_allocated_pkeys < NR_PKEYS);
+			allocated_pkeys[nr_allocated_pkeys++] = new_pkey;
 		}
-		pkey_assert(nr_allocated_pkeys < NR_PKEYS);
-		allocated_pkeys[nr_allocated_pkeys++] = new_pkey;
+		/*
+		 * Make sure that allocation state is properly
+		 * preserved across fork().
+		 */
+		if (i == NR_PKEYS*2)
+			become_child();
 	}
 
 	dprintf3("%s()::%d\n", __func__, __LINE__);
@@ -1271,7 +1291,7 @@ void test_pkey_alloc_exhaust(int *ptr, u16 pkey)
 	 * ensure it did not reach the end of the loop without
 	 * failure:
 	 */
-	pkey_assert(i < NR_PKEYS*2);
+	pkey_assert(i == NR_PKEYS*3);
 
 	/*
 	 * There are NR_PKEYS pkeys supported in hardware. arch_reserved_keys()
